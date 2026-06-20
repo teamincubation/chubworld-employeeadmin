@@ -1,5 +1,7 @@
 const crypto = require('crypto');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
+require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
 // Ensure there is a 32-byte key for AES-256-CBC. Fallback to a hardcoded string if not set.
 // A real deployment must override this in the .env file.
