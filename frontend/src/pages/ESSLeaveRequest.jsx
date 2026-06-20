@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, API_BASE_URL } from '../context/AuthContext';
 import { CalendarDays, AlertTriangle, ShieldAlert, Check, FileText } from 'lucide-react';
 
 export default function ESSLeaveRequest() {
@@ -80,7 +80,7 @@ export default function ESSLeaveRequest() {
       }
 
       // Call API using fetch directly since it's FormData
-      const res = await fetch('http://localhost:5000/api/leaves/request', {
+      const res = await fetch(`${API_BASE_URL}/leaves/request`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
         body: form

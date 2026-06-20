@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, API_BASE_URL } from '../context/AuthContext';
 import { User, Lock, Key, ShieldAlert, CheckCircle, FileText } from 'lucide-react';
 
 export default function ESSProfile() {
@@ -107,7 +107,7 @@ export default function ESSProfile() {
             }}>
               {employee.photo_path ? (
                 <img 
-                  src={`http://localhost:5000/api/documents/download/${employee.photo_path.split('/').pop()}`} 
+                  src={`${API_BASE_URL}/documents/download/${employee.photo_path.split('/').pop()}`} 
                   alt="Avatar" 
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
@@ -228,7 +228,7 @@ export default function ESSProfile() {
                   <div key={doc.id} className="flex-between" style={{ padding: '8px 12px', backgroundColor: 'var(--bg-primary)', borderRadius: '6px', fontSize: '13px' }}>
                     <span style={{ fontWeight: 600 }}>{doc.document_type}</span>
                     <a 
-                      href={`http://localhost:5000/api/documents/download/doc-${doc.id}`}
+                      href={`${API_BASE_URL}/documents/download/doc-${doc.id}`}
                       target="_blank"
                       rel="noreferrer"
                       style={{ color: 'var(--chub-pink)', display: 'flex', alignItems: 'center', gap: '4px' }}

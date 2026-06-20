@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, API_BASE_URL } from '../context/AuthContext';
 import { Calendar, FileText, Check, X, ShieldAlert, Plus, Edit3 } from 'lucide-react';
 
 export default function LeaveManager() {
@@ -165,7 +165,7 @@ export default function LeaveManager() {
                               <div style={{ fontSize: '13px', maxWidth: '200px', marginBottom: '4px' }}>{req.reason}</div>
                               {req.attachment_path && (
                                 <a 
-                                  href={`http://localhost:5000/api/documents/download/${req.attachment_path.split('/').pop()}`}
+                                  href={`${API_BASE_URL}/documents/download/${req.attachment_path.split('/').pop()}`}
                                   target="_blank"
                                   rel="noreferrer"
                                   style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--chub-pink)', fontWeight: 600 }}

@@ -48,13 +48,15 @@ app.use('/uploads', (req, res, next) => {
   res.status(403).json({ message: 'Direct directory traversal blocked.' });
 });
 
-// 6. Basic health check route
-app.get('/', (req, res) => {
-  res.json({ 
-    message: 'Welcome to C-Hub HR System API.', 
-    status: 'online', 
-    timezone: 'Asia/Kolkata (IST)' 
-  });
+// 6. Serve frontend static assets in production
+app.use(express.static(path.join(__dirname, '../frontend/dist')));
+
+// Fallback to React Router for non-API/non-upload routes
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
+    return next();
+  }
+  res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
 });
 
 // 7. Global Error Handler Middleware

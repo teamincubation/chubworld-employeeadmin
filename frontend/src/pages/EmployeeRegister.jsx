@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, API_BASE_URL } from '../context/AuthContext';
 import { 
   Search, Filter, Plus, Edit2, Trash2, Eye, 
   Download, Printer, Check, X, ShieldAlert, 
@@ -126,7 +126,7 @@ export default function EmployeeRegister() {
         const photoForm = new FormData();
         photoForm.append('document', photoFile);
         photoForm.append('documentType', 'Other');
-        await fetch(`http://localhost:5000/api/employees/${employeeId}/documents`, {
+        await fetch(`${API_BASE_URL}/employees/${employeeId}/documents`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
           body: photoForm
@@ -143,7 +143,7 @@ export default function EmployeeRegister() {
         form.append('document', doc.file);
         form.append('documentType', doc.type);
         try {
-          await fetch(`http://localhost:5000/api/employees/${employeeId}/documents`, {
+          await fetch(`${API_BASE_URL}/employees/${employeeId}/documents`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
             body: form
@@ -848,7 +848,7 @@ export default function EmployeeRegister() {
               }}>
                 {profileData.employee.photo_path ? (
                   <img 
-                    src={`http://localhost:5000/api/documents/download/${profileData.employee.photo_path.split('/').pop()}`} 
+                    src={`${API_BASE_URL}/documents/download/${profileData.employee.photo_path.split('/').pop()}`} 
                     alt="Photo" 
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
@@ -965,18 +965,18 @@ export default function EmployeeRegister() {
                       <div key={doc.id} className="flex-between" style={{ padding: '8px 12px', backgroundColor: 'var(--bg-primary)', borderRadius: '6px', fontSize: '13px' }}>
                         <span style={{ fontWeight: 600 }}>{doc.document_type}</span>
                         <a 
-                          href={`http://localhost:5000/api/documents/download/${doc.id}`} // Will secure serve
+                          href={`${API_BASE_URL}/documents/download/${doc.id}`} // Will secure serve
                           // In demo, download by filename directly
                           onClick={async (e) => {
                             e.preventDefault();
                             // Fetch via auth header
                             try {
-                              const res = await fetch(`http://localhost:5000/api/documents/download/employee-${doc.id}`, { // fallback checks or fetch by id
+                              const res = await fetch(`${API_BASE_URL}/documents/download/employee-${doc.id}`, { // fallback checks or fetch by id
                                 headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
                               });
                               if (!res.ok) throw new Error();
                               // Simple open document link
-                              window.open(`http://localhost:5000/api/documents/download/doc-${doc.id}?token=${localStorage.getItem('token')}`, '_blank');
+                              window.open(`${API_BASE_URL}/documents/download/doc-${doc.id}?token=${localStorage.getItem('token')}`, '_blank');
                             } catch {
                               alert('Unable to secure download document.');
                             }

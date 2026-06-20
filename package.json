@@ -2,12 +2,16 @@
   "name": "c-hub-hr-system",
   "version": "1.0.0",
   "description": "C-Hub / Chubworld HR Admin Panel and ESS Dashboard ERP System",
+  "main": "server.js",
   "scripts": {
-    "install-backend": "cmd /c \"cd backend && npm install\"",
-    "install-frontend": "cmd /c \"cd frontend && npm install\"",
-    "install-all": "cmd /c \"npm run install-backend && npm run install-frontend\"",
-    "backend": "cmd /c \"cd backend && npm start\"",
-    "frontend": "cmd /c \"cd frontend && npm run dev\""
+    "install-backend": "cd backend && npm install",
+    "install-frontend": "cd frontend && npm install",
+    "install-all": "npm run install-backend && npm run install-frontend",
+    "build-frontend": "cd frontend && npm run build",
+    "build": "npm run install-all && npm run build-frontend",
+    "start": "node server.js",
+    "backend": "cd backend && npm start",
+    "frontend": "cd frontend && npm run dev"
   },
   "keywords": [
     "chub",
