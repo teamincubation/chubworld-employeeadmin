@@ -42,6 +42,15 @@ app.use('/api/auth/forgot-password', authLimiter);
 // 5. Mount API Routes
 app.use('/api', apiRouter);
 
+// Health check route
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    message: 'Welcome to C-Hub HR System API.', 
+    status: 'online', 
+    timezone: 'Asia/Kolkata (IST)' 
+  });
+});
+
 // Serve static directory (Fallback route if direct serve permitted, but API downloads route is preferred for security)
 // We block direct index traversal of uploads folder
 app.use('/uploads', (req, res, next) => {
