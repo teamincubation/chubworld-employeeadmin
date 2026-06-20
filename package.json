@@ -9,6 +9,7 @@
     "install-all": "npm run install-backend && npm run install-frontend",
     "build-frontend": "cd frontend && npm run build",
     "build": "npm run install-all && npm run build-frontend",
+    "postinstall": "npm run install-all && npm run build-frontend",
     "start": "node server.js",
     "backend": "cd backend && npm start",
     "frontend": "cd frontend && npm run dev"
