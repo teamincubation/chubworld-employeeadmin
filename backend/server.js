@@ -93,6 +93,7 @@ async function syncSuperAdminCredentials() {
       return;
     }
     console.log('🔄 Synchronizing Super Admin credentials in Supabase...');
+    console.log('SUPABASE_URL:', process.env.SUPABASE_URL);
     
     const { error: userError } = await supabase
       .from('users')
