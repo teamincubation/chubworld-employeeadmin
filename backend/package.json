@@ -1,0 +1,33 @@
+{
+  "name": "chub-hr-backend",
+  "version": "1.0.0",
+  "description": "C-Hub HR Admin Panel and Employee Self-Service API Backend",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": [
+    "chub",
+    "hr",
+    "edtech",
+    "payroll",
+    "attendance"
+  ],
+  "author": "C-Hub Lead Architect",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.3.1",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "mysql2": "^3.10.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  }
+}
