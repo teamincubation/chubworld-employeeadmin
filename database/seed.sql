@@ -117,7 +117,7 @@ INSERT INTO system_settings (setting_key, setting_value, description) VALUES
 ('company_name', 'C-Hub / Chubworld', 'The legal official company name display'),
 ('tagline', 'Creating Wow World', 'Branding tagline displayed on logins and dashboard'),
 ('geofence_enforced', 'true', 'Whether attendance clock-in requires matching work location radius coordinates'),
-('smtp_host', 'mail.chubworld.com', 'Mail server host for password reset email dispatches'),
+('smtp_host', 'smtp.hostinger.com', 'Mail server host for password reset email dispatches'),
 ('smtp_port', '465', 'Secure mail server port'),
 ('smtp_user', 'no-reply@chubworld.com', 'System email account credentials'),
 ('smtp_pass', 'placeholder_smtp_pass', 'System email security password');
