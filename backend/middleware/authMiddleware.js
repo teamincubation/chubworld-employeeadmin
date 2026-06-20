@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const db = require('../config/db');
+const supabase = require('../config/db');
 require('dotenv').config();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'chub_super_secret_jwt_key_2026_creating_wow_world';
@@ -19,15 +19,13 @@ async function authenticateToken(req, res, next) {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     
-    // Fetch user from DB to verify they are still active and validate their role
-    const users = await db.query(`
-      SELECT u.id, u.email, u.status, u.onboarding_completed, r.id AS role_id, r.name AS role_name 
-      FROM users u
-      JOIN roles r ON u.role_id = r.id
-      WHERE u.id = ?
-    `, [decoded.id]);
+    // Fetch user from Supabase to verify they are still active and validate their role
+    const { data: users, error: userError } = await supabase
+      .from('users')
+      .select('id, email, status, onboarding_completed, role_id, roles(id, name)')
+      .eq('id', decoded.id);
 
-    if (users.length === 0) {
+    if (userError || !users || users.length === 0) {
       return res.status(403).json({ message: 'User session invalid or expired.' });
     }
 
@@ -36,30 +34,34 @@ async function authenticateToken(req, res, next) {
       return res.status(403).json({ message: 'Your account has been deactivated.' });
     }
 
-    // Load permissions for this role
-    const permissions = await db.query(`
-      SELECT p.name 
-      FROM permissions p
-      JOIN role_permissions rp ON p.id = rp.permission_id
-      WHERE rp.role_id = ?
-    `, [user.role_id]);
+    const roleName = user.roles ? user.roles.name : '';
 
-    const userPermissions = permissions.map(p => p.name);
+    // Load permissions for this role
+    const { data: rolePerms, error: permError } = await supabase
+      .from('role_permissions')
+      .select('permissions(name)')
+      .eq('role_id', user.role_id);
+
+    const userPermissions = (rolePerms || []).map(rp => rp.permissions ? rp.permissions.name : null).filter(Boolean);
 
     // Attach user information to request
     req.user = {
       id: user.id,
       email: user.email,
       roleId: user.role_id,
-      roleName: user.role_name,
+      roleName: roleName,
       onboardingCompleted: user.onboarding_completed,
       permissions: userPermissions
     };
 
     // If Employee is logged in, we fetch their Employee table record ID and attach it
-    if (user.role_name === 'Employee') {
-      const employees = await db.query('SELECT id, employee_id, full_name, onboarding_status FROM employees WHERE user_id = ?', [user.id]);
-      if (employees.length > 0) {
+    if (roleName === 'Employee') {
+      const { data: employees, error: empError } = await supabase
+        .from('employees')
+        .select('id, employee_id, full_name, onboarding_status')
+        .eq('user_id', user.id);
+        
+      if (!empError && employees && employees.length > 0) {
         req.user.employeeId = employees[0].id;
         req.user.employeeStringId = employees[0].employee_id;
         req.user.fullName = employees[0].full_name;

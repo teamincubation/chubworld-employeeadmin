@@ -1,4 +1,4 @@
-const db = require('../config/db');
+const supabase = require('../config/db');
 const { encrypt, decrypt, maskValue } = require('../utils/cryptoHelper');
 const { logAudit } = require('../utils/auditLogger');
 const fs = require('fs');
@@ -25,48 +25,47 @@ const employeeController = {
 
     try {
       // Check if employee_id already exists
-      const existing = await db.query('SELECT id FROM employees WHERE employee_id = ? OR email = ?', [employee_id, email]);
-      if (existing.length > 0) {
+      const { data: existing, error: existErr } = await supabase
+        .from('employees')
+        .select('id')
+        .or(`employee_id.eq.${employee_id},email.eq.${email}`);
+
+      if (existing && existing.length > 0) {
         return res.status(400).json({ message: 'Employee ID or Email already exists in the register.' });
       }
 
       // Insert employee record
-      const result = await db.query(`
-        INSERT INTO employees (
-          employee_id, full_name, mobile, email, department_id, designation_id,
-          current_address, permanent_address, pincode, country, state, district, post_office,
-          interviewed_hrs, interviewed_date, appointed_date, contract_till_date,
-          dob, gender, blood_group, marital_status, nationality, citizenship_status,
-          emergency_contact_name, emergency_contact_number, alt_mobile, alt_email,
-          reporting_manager_id, work_location_id, employment_type, joining_salary,
-          probation_period_days, confirmation_date, onboarding_status, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')
-      `, [
-        employee_id, full_name, mobile, email, department_id || null, designation_id || null,
-        current_address || null, permanent_address || null, pincode, country || 'India', state || null, district || null, post_office || null,
-        interviewed_hrs || null, interviewed_date || null, appointed_date || null, contract_till_date || null,
-        dob || null, gender || null, blood_group || null, marital_status || null, nationality || 'Indian', citizenship_status || 'Citizen',
-        emergency_contact_name || null, emergency_contact_number || null, alt_mobile || null, alt_email || null,
-        reporting_manager_id || null, work_location_id || null, employment_type || 'Full-time', joining_salary || 0.00,
-        probation_period_days || 180, confirmation_date || null, onboarding_status || 'Draft'
-      ]);
+      const { data: result, error: insertErr } = await supabase
+        .from('employees')
+        .insert([{
+          employee_id, full_name, mobile, email, department_id: department_id || null, designation_id: designation_id || null,
+          current_address: current_address || null, permanent_address: permanent_address || null, pincode, country: country || 'India', state: state || null, district: district || null, post_office: post_office || null,
+          interviewed_hrs: interviewed_hrs || null, interviewed_date: interviewed_date || null, appointed_date: appointed_date || null, contract_till_date: contract_till_date || null,
+          dob: dob || null, gender: gender || null, blood_group: blood_group || null, marital_status: marital_status || null, nationality: nationality || 'Indian', citizenship_status: citizenship_status || 'Citizen',
+          emergency_contact_name: emergency_contact_name || null, emergency_contact_number: emergency_contact_number || null, alt_mobile: alt_mobile || null, alt_email: alt_email || null,
+          reporting_manager_id: reporting_manager_id || null, work_location_id: work_location_id || null, employment_type: employment_type || 'Full-time', joining_salary: joining_salary || 0.00,
+          probation_period_days: probation_period_days || 180, confirmation_date: confirmation_date || null, onboarding_status: onboarding_status || 'Draft', status: 'Active'
+        }])
+        .select('id')
+        .single();
 
-      const newEmployeeId = result.insertId;
+      if (insertErr) throw insertErr;
+
+      const newEmployeeId = result.id;
 
       // Handle KYC Data (Encrypt if provided)
       const encryptedAadhaar = aadhaar_number ? encrypt(aadhaar_number.replace(/\s/g, '')) : null;
       const encryptedPan = pan_number ? encrypt(pan_number.toUpperCase()) : null;
       const encryptedBank = bank_account_number ? encrypt(bank_account_number) : null;
 
-      await db.query(`
-        INSERT INTO employee_kyc (
-          employee_id, aadhaar_number_encrypted, pan_number_encrypted, 
-          bank_account_number_encrypted, bank_name, bank_ifsc, upi_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-      `, [
-        newEmployeeId, encryptedAadhaar, encryptedPan, encryptedBank, 
-        bank_name || null, bank_ifsc || null, upi_id || null
-      ]);
+      const { error: kycErr } = await supabase
+        .from('employee_kyc')
+        .insert([{
+          employee_id: newEmployeeId, aadhaar_number_encrypted: encryptedAadhaar, pan_number_encrypted: encryptedPan, 
+          bank_account_number_encrypted: encryptedBank, bank_name: bank_name || null, bank_ifsc: bank_ifsc || null, upi_id: upi_id || null
+        }]);
+
+      if (kycErr) throw kycErr;
 
       // If onboarding status is Completed/Approved, check if we need to create login user credentials
       if (onboarding_status === 'Approved' || onboarding_status === 'Onboarding Completed') {
@@ -86,8 +85,8 @@ const employeeController = {
   // Helper to create user account upon onboarding approval
   autoCreateUserAccount: async (employeeId, email, name) => {
     try {
-      const existingUser = await db.query('SELECT id FROM users WHERE email = ?', [email]);
-      if (existingUser.length > 0) return;
+      const { data: existingUser } = await supabase.from('users').select('id').eq('email', email);
+      if (existingUser && existingUser.length > 0) return;
 
       // Generate default hashed password
       const bcrypt = require('bcryptjs');
@@ -96,23 +95,27 @@ const employeeController = {
       const passHash = await bcrypt.hash(defaultPassword, salt);
 
       // Default role is Employee (ID 6)
-      const userResult = await db.query(`
-        INSERT INTO users (email, password_hash, role_id, status, onboarding_completed)
-        VALUES (?, ?, 6, 'active', TRUE)
-      `, [email, passHash]);
+      const { data: userResult, error: userErr } = await supabase
+        .from('users')
+        .insert([{ email, password_hash: passHash, role_id: 6, status: 'active', onboarding_completed: true }])
+        .select('id')
+        .single();
 
-      const newUserId = userResult.insertId;
+      if (userErr) throw userErr;
+
+      const newUserId = userResult.id;
 
       // Link employee back to users table
-      await db.query('UPDATE employees SET user_id = ? WHERE id = ?', [newUserId, employeeId]);
+      await supabase.from('employees').update({ user_id: newUserId }).eq('id', employeeId);
       
       // Initialize leave balance for 2026
-      const leaveTypes = await db.query('SELECT id, max_days FROM leave_types WHERE active = TRUE');
-      for (const lt of leaveTypes) {
-        await db.query(`
-          INSERT INTO leave_balances (employee_id, leave_type_id, total_days, availed_days, pending_days, year)
-          VALUES (?, ?, ?, 0.00, 0.00, 2026)
-        `, [employeeId, lt.id, lt.max_days]);
+      const { data: leaveTypes } = await supabase.from('leave_types').select('id, max_days').eq('active', true);
+      if (leaveTypes) {
+        for (const lt of leaveTypes) {
+          await supabase.from('leave_balances').insert([{
+            employee_id: employeeId, leave_type_id: lt.id, total_days: lt.max_days, availed_days: 0.00, pending_days: 0.00, year: 2026
+          }]);
+        }
       }
 
       console.log(`Auto User created for employee ID ${employeeId}. Account email: ${email}. Temporary password: ${defaultPassword}`);
@@ -125,59 +128,43 @@ const employeeController = {
   listEmployees: async (req, res) => {
     const { search, departmentId, designationId, employmentType, onboardingStatus, status } = req.query;
     
-    let query = `
-      SELECT e.id, e.employee_id, e.full_name, e.mobile, e.email, e.onboarding_status, e.status,
-             e.employment_type, d.name AS department_name, des.name AS designation_name,
-             wl.name AS work_location_name, e.joining_salary
-      FROM employees e
-      LEFT JOIN departments d ON e.department_id = d.id
-      LEFT JOIN designations des ON e.designation_id = des.id
-      LEFT JOIN work_locations wl ON e.work_location_id = wl.id
-      WHERE e.deleted_at IS NULL
-    `;
-
-    const params = [];
+    let query = supabase
+      .from('employees')
+      .select(`
+        id, employee_id, full_name, mobile, email, onboarding_status, status,
+        employment_type, joining_salary,
+        departments(name), designations(name), work_locations(name)
+      `)
+      .is('deleted_at', null)
+      .order('id', { ascending: false });
 
     if (search) {
-      query += ` AND (e.full_name LIKE ? OR e.employee_id LIKE ? OR e.mobile LIKE ? OR e.email LIKE ?)`;
-      const searchWild = `%${search}%`;
-      params.push(searchWild, searchWild, searchWild, searchWild);
+      query = query.or(`full_name.ilike.%${search}%,employee_id.ilike.%${search}%,mobile.ilike.%${search}%,email.ilike.%${search}%`);
     }
-
-    if (departmentId) {
-      query += ` AND e.department_id = ?`;
-      params.push(departmentId);
-    }
-
-    if (designationId) {
-      query += ` AND e.designation_id = ?`;
-      params.push(designationId);
-    }
-
-    if (employmentType) {
-      query += ` AND e.employment_type = ?`;
-      params.push(employmentType);
-    }
-
-    if (onboardingStatus) {
-      query += ` AND e.onboarding_status = ?`;
-      params.push(onboardingStatus);
-    }
-
-    if (status) {
-      query += ` AND e.status = ?`;
-      params.push(status);
-    }
-
-    query += ` ORDER BY e.id DESC`;
+    if (departmentId) query = query.eq('department_id', departmentId);
+    if (designationId) query = query.eq('designation_id', designationId);
+    if (employmentType) query = query.eq('employment_type', employmentType);
+    if (onboardingStatus) query = query.eq('onboarding_status', onboardingStatus);
+    if (status) query = query.eq('status', status);
 
     try {
-      const list = await db.query(query, params);
+      const { data: list, error } = await query;
+      if (error) throw error;
 
       // Mask sensitive payroll fields for roles that do NOT have payroll:view permission
       const hasPayrollView = req.user && req.user.permissions.includes('payroll:view');
       const sanitizedList = list.map(emp => {
-        const copy = { ...emp };
+        const copy = { 
+          ...emp,
+          department_name: emp.departments ? emp.departments.name : null,
+          designation_name: emp.designations ? emp.designations.name : null,
+          work_location_name: emp.work_locations ? emp.work_locations.name : null
+        };
+        // Remove nested objects
+        delete copy.departments;
+        delete copy.designations;
+        delete copy.work_locations;
+
         if (!hasPayrollView) {
           copy.joining_salary = '₹ XXXXX';
         }
@@ -196,22 +183,39 @@ const employeeController = {
     const { id } = req.params;
 
     try {
-      const employees = await db.query(`
-        SELECT e.*, d.name AS department_name, des.name AS designation_name,
-               wl.name AS work_location_name, mgr.full_name AS manager_name
-        FROM employees e
-        LEFT JOIN departments d ON e.department_id = d.id
-        LEFT JOIN designations des ON e.designation_id = des.id
-        LEFT JOIN work_locations wl ON e.work_location_id = wl.id
-        LEFT JOIN employees mgr ON e.reporting_manager_id = mgr.id
-        WHERE e.id = ? AND e.deleted_at IS NULL
-      `, [id]);
+      const { data: employees, error } = await supabase
+        .from('employees')
+        .select(`
+          *,
+          departments(name), designations(name), work_locations(name)
+        `)
+        .eq('id', id)
+        .is('deleted_at', null);
 
-      if (employees.length === 0) {
+      if (error || !employees || employees.length === 0) {
         return res.status(404).json({ message: 'Employee not found.' });
       }
 
-      const employee = { ...employees[0] };
+      const employeeRaw = employees[0];
+
+      // Fetch manager separately to avoid complex self-join query errors in Supabase JS
+      let manager_name = null;
+      if (employeeRaw.reporting_manager_id) {
+        const { data: mgr } = await supabase.from('employees').select('full_name').eq('id', employeeRaw.reporting_manager_id);
+        if (mgr && mgr.length > 0) manager_name = mgr[0].full_name;
+      }
+
+      const employee = { 
+        ...employeeRaw,
+        department_name: employeeRaw.departments ? employeeRaw.departments.name : null,
+        designation_name: employeeRaw.designations ? employeeRaw.designations.name : null,
+        work_location_name: employeeRaw.work_locations ? employeeRaw.work_locations.name : null,
+        manager_name: manager_name
+      };
+
+      delete employee.departments;
+      delete employee.designations;
+      delete employee.work_locations;
 
       // Mask joining salary if not authorized
       const hasPayrollView = req.user && req.user.permissions.includes('payroll:view');
@@ -220,10 +224,10 @@ const employeeController = {
       }
 
       // Fetch documents
-      const docs = await db.query('SELECT id, document_type, document_name, uploaded_at FROM employee_documents WHERE employee_id = ?', [id]);
+      const { data: docs } = await supabase.from('employee_documents').select('id, document_type, document_name, uploaded_at').eq('employee_id', id);
       
       // Fetch KYC (Get masked values only)
-      const kycRecords = await db.query('SELECT bank_name, bank_ifsc, upi_id, aadhaar_number_encrypted, pan_number_encrypted, bank_account_number_encrypted FROM employee_kyc WHERE employee_id = ?', [id]);
+      const { data: kycRecords } = await supabase.from('employee_kyc').select('bank_name, bank_ifsc, upi_id, aadhaar_number_encrypted, pan_number_encrypted, bank_account_number_encrypted').eq('employee_id', id);
       
       let kyc = {
         aadhaar: 'XXXX XXXX XXXX',
@@ -234,7 +238,7 @@ const employeeController = {
         upi_id: ''
       };
 
-      if (kycRecords.length > 0) {
+      if (kycRecords && kycRecords.length > 0) {
         const kRecord = kycRecords[0];
         const plainAadhaar = kRecord.aadhaar_number_encrypted ? decrypt(kRecord.aadhaar_number_encrypted) : '';
         const plainPan = kRecord.pan_number_encrypted ? decrypt(kRecord.pan_number_encrypted) : '';
@@ -253,7 +257,7 @@ const employeeController = {
       res.json({
         employee,
         kyc,
-        documents: docs
+        documents: docs || []
       });
     } catch (err) {
       console.error('Get Employee Error:', err.message);
@@ -261,13 +265,13 @@ const employeeController = {
     }
   },
 
-  // Fetch fully unmasked sensitive KYC values (Requires strict KYC View permission + logs event)
+  // Fetch fully unmasked sensitive KYC values
   getEmployeeKycDecrypted: async (req, res) => {
     const { id } = req.params;
 
     try {
-      const kycRecords = await db.query('SELECT * FROM employee_kyc WHERE employee_id = ?', [id]);
-      if (kycRecords.length === 0) {
+      const { data: kycRecords, error } = await supabase.from('employee_kyc').select('*').eq('employee_id', id);
+      if (error || !kycRecords || kycRecords.length === 0) {
         return res.status(404).json({ message: 'KYC record not found.' });
       }
 
@@ -278,7 +282,7 @@ const employeeController = {
       const plainPan = kRecord.pan_number_encrypted ? decrypt(kRecord.pan_number_encrypted) : '';
       const plainBank = kRecord.bank_account_number_encrypted ? decrypt(kRecord.bank_account_number_encrypted) : '';
 
-      // Log this access in the immutable audit logs (required by business rule)
+      // Log this access in the immutable audit logs
       await logAudit(req, 'VIEW_SENSITIVE_KYC', `employees/${id}`, null, { details: 'KYC decrypted fields viewed' });
 
       res.json({
@@ -311,47 +315,29 @@ const employeeController = {
     } = req.body;
 
     try {
-      const current = await db.query('SELECT * FROM employees WHERE id = ?', [id]);
-      if (current.length === 0) {
+      const { data: current, error: curErr } = await supabase.from('employees').select('*').eq('id', id);
+      if (curErr || !current || current.length === 0) {
         return res.status(404).json({ message: 'Employee not found.' });
       }
 
       const oldEmployee = current[0];
 
       // Update basic fields
-      await db.query(`
-        UPDATE employees SET
-          full_name = ?, mobile = ?, email = ?, department_id = ?, designation_id = ?,
-          current_address = ?, permanent_address = ?, pincode = ?, country = ?, state = ?, district = ?, post_office = ?,
-          interviewed_hrs = ?, interviewed_date = ?, appointed_date = ?, contract_till_date = ?,
-          dob = ?, gender = ?, blood_group = ?, marital_status = ?, nationality = ?, citizenship_status = ?,
-          emergency_contact_name = ?, emergency_contact_number = ?, alt_mobile = ?, alt_email = ?,
-          reporting_manager_id = ?, work_location_id = ?, employment_type = ?, joining_salary = ?,
-          probation_period_days = ?, confirmation_date = ?, onboarding_status = ?, status = ?
-        WHERE id = ?
-      `, [
-        full_name || oldEmployee.full_name, mobile || oldEmployee.mobile, email || oldEmployee.email, 
-        department_id || oldEmployee.department_id, designation_id || oldEmployee.designation_id,
-        current_address || oldEmployee.current_address, permanent_address || oldEmployee.permanent_address, 
-        pincode || oldEmployee.pincode, country || oldEmployee.country, state || oldEmployee.state, 
-        district || oldEmployee.district, post_office || oldEmployee.post_office,
-        interviewed_hrs || oldEmployee.interviewed_hrs, interviewed_date || oldEmployee.interviewed_date, 
-        appointed_date || oldEmployee.appointed_date, contract_till_date || oldEmployee.contract_till_date,
-        dob || oldEmployee.dob, gender || oldEmployee.gender, blood_group || oldEmployee.blood_group, 
-        marital_status || oldEmployee.marital_status, nationality || oldEmployee.nationality, 
-        citizenship_status || oldEmployee.citizenship_status,
-        emergency_contact_name || oldEmployee.emergency_contact_name, emergency_contact_number || oldEmployee.emergency_contact_number, 
-        alt_mobile || oldEmployee.alt_mobile, alt_email || oldEmployee.alt_email,
-        reporting_manager_id || oldEmployee.reporting_manager_id, work_location_id || oldEmployee.work_location_id, 
-        employment_type || oldEmployee.employment_type, joining_salary || oldEmployee.joining_salary,
-        probation_period_days || oldEmployee.probation_period_days, confirmation_date || oldEmployee.confirmation_date, 
-        onboarding_status || oldEmployee.onboarding_status, status || oldEmployee.status,
-        id
-      ]);
+      const { error: updErr } = await supabase.from('employees').update({
+        full_name: full_name || oldEmployee.full_name, mobile: mobile || oldEmployee.mobile, email: email || oldEmployee.email, department_id: department_id || oldEmployee.department_id, designation_id: designation_id || oldEmployee.designation_id,
+        current_address: current_address || oldEmployee.current_address, permanent_address: permanent_address || oldEmployee.permanent_address, pincode: pincode || oldEmployee.pincode, country: country || oldEmployee.country, state: state || oldEmployee.state, district: district || oldEmployee.district, post_office: post_office || oldEmployee.post_office,
+        interviewed_hrs: interviewed_hrs || oldEmployee.interviewed_hrs, interviewed_date: interviewed_date || oldEmployee.interviewed_date, appointed_date: appointed_date || oldEmployee.appointed_date, contract_till_date: contract_till_date || oldEmployee.contract_till_date,
+        dob: dob || oldEmployee.dob, gender: gender || oldEmployee.gender, blood_group: blood_group || oldEmployee.blood_group, marital_status: marital_status || oldEmployee.marital_status, nationality: nationality || oldEmployee.nationality, citizenship_status: citizenship_status || oldEmployee.citizenship_status,
+        emergency_contact_name: emergency_contact_name || oldEmployee.emergency_contact_name, emergency_contact_number: emergency_contact_number || oldEmployee.emergency_contact_number, alt_mobile: alt_mobile || oldEmployee.alt_mobile, alt_email: alt_email || oldEmployee.alt_email,
+        reporting_manager_id: reporting_manager_id || oldEmployee.reporting_manager_id, work_location_id: work_location_id || oldEmployee.work_location_id, employment_type: employment_type || oldEmployee.employment_type, joining_salary: joining_salary || oldEmployee.joining_salary,
+        probation_period_days: probation_period_days || oldEmployee.probation_period_days, confirmation_date: confirmation_date || oldEmployee.confirmation_date, onboarding_status: onboarding_status || oldEmployee.onboarding_status, status: status || oldEmployee.status
+      }).eq('id', id);
+
+      if (updErr) throw updErr;
 
       // Update KYC fields (only override if new values are supplied and aren't masked place-holders)
-      const currentKyc = await db.query('SELECT * FROM employee_kyc WHERE employee_id = ?', [id]);
-      if (currentKyc.length > 0) {
+      const { data: currentKyc } = await supabase.from('employee_kyc').select('*').eq('employee_id', id);
+      if (currentKyc && currentKyc.length > 0) {
         let updatedAadhaar = currentKyc[0].aadhaar_number_encrypted;
         let updatedPan = currentKyc[0].pan_number_encrypted;
         let updatedBank = currentKyc[0].bank_account_number_encrypted;
@@ -366,17 +352,10 @@ const employeeController = {
           updatedBank = encrypt(bank_account_number);
         }
 
-        await db.query(`
-          UPDATE employee_kyc SET
-            aadhaar_number_encrypted = ?, pan_number_encrypted = ?, bank_account_number_encrypted = ?,
-            bank_name = ?, bank_ifsc = ?, upi_id = ?
-          WHERE employee_id = ?
-        `, [
-          updatedAadhaar, updatedPan, updatedBank,
-          bank_name || currentKyc[0].bank_name, bank_ifsc || currentKyc[0].bank_ifsc, 
-          upi_id || currentKyc[0].upi_id,
-          id
-        ]);
+        await supabase.from('employee_kyc').update({
+          aadhaar_number_encrypted: updatedAadhaar, pan_number_encrypted: updatedPan, bank_account_number_encrypted: updatedBank,
+          bank_name: bank_name || currentKyc[0].bank_name, bank_ifsc: bank_ifsc || currentKyc[0].bank_ifsc, upi_id: upi_id || currentKyc[0].upi_id
+        }).eq('employee_id', id);
       }
 
       // Check if employee onboarding status was updated to Approved and user login exists
@@ -385,7 +364,7 @@ const employeeController = {
       }
 
       // Log changes in immutable audit log
-      const updated = await db.query('SELECT * FROM employees WHERE id = ?', [id]);
+      const { data: updated } = await supabase.from('employees').select('*').eq('id', id);
       await logAudit(req, 'EDIT_EMPLOYEE', `employees/${id}`, oldEmployee, updated[0]);
 
       res.json({ message: 'Employee profile updated successfully.' });
@@ -400,17 +379,17 @@ const employeeController = {
     const { id } = req.params;
 
     try {
-      const employee = await db.query('SELECT * FROM employees WHERE id = ?', [id]);
-      if (employee.length === 0) {
+      const { data: employee, error } = await supabase.from('employees').select('*').eq('id', id);
+      if (error || !employee || employee.length === 0) {
         return res.status(404).json({ message: 'Employee not found.' });
       }
 
       // Perform Soft Delete
-      await db.query('UPDATE employees SET deleted_at = CURRENT_TIMESTAMP, status = "Inactive" WHERE id = ?', [id]);
+      await supabase.from('employees').update({ deleted_at: new Date().toISOString(), status: 'Inactive' }).eq('id', id);
 
       // If user account exists, suspend it
       if (employee[0].user_id) {
-        await db.query('UPDATE users SET status = "inactive" WHERE id = ?', [employee[0].user_id]);
+        await supabase.from('users').update({ status: 'inactive' }).eq('id', employee[0].user_id);
       }
 
       await logAudit(req, 'DELETE_EMPLOYEE', `employees/${id}`, employee[0], { deleted: true });
@@ -422,22 +401,22 @@ const employeeController = {
     }
   },
 
-  // Restore Employee (Super Admin only check inside router)
+  // Restore Employee
   restoreEmployee: async (req, res) => {
     const { id } = req.params;
 
     try {
-      const employee = await db.query('SELECT * FROM employees WHERE id = ?', [id]);
-      if (employee.length === 0) {
+      const { data: employee, error } = await supabase.from('employees').select('*').eq('id', id);
+      if (error || !employee || employee.length === 0) {
         return res.status(404).json({ message: 'Employee not found.' });
       }
 
       // Restore record
-      await db.query('UPDATE employees SET deleted_at = NULL, status = "Active" WHERE id = ?', [id]);
+      await supabase.from('employees').update({ deleted_at: null, status: 'Active' }).eq('id', id);
 
       // If user account exists, re-activate
       if (employee[0].user_id) {
-        await db.query('UPDATE users SET status = "active" WHERE id = ?', [employee[0].user_id]);
+        await supabase.from('users').update({ status: 'active' }).eq('id', employee[0].user_id);
       }
 
       await logAudit(req, 'RESTORE_EMPLOYEE', `employees/${id}`, { deleted: true }, { restored: true });
@@ -452,8 +431,14 @@ const employeeController = {
   // Fetch lists for managers dropdown
   getEmployeesDropdown: async (req, res) => {
     try {
-      const list = await db.query('SELECT id, employee_id, full_name FROM employees WHERE status = "Active" AND deleted_at IS NULL');
-      res.json(list);
+      const { data: list, error } = await supabase
+        .from('employees')
+        .select('id, employee_id, full_name')
+        .eq('status', 'Active')
+        .is('deleted_at', null);
+
+      if (error) throw error;
+      res.json(list || []);
     } catch (err) {
       console.error('Dropdown retrieve error:', err.message);
       res.status(500).json({ message: 'Error loading choices.' });
@@ -470,19 +455,18 @@ const employeeController = {
     }
 
     try {
-      const employee = await db.query('SELECT id, full_name FROM employees WHERE id = ?', [id]);
-      if (employee.length === 0) {
+      const { data: employee, error } = await supabase.from('employees').select('id, full_name').eq('id', id);
+      if (error || !employee || employee.length === 0) {
         return res.status(404).json({ message: 'Employee not found.' });
       }
 
       const docName = req.file.originalname;
-      const docPath = req.file.path.replace(/\\/g, '/'); // Normalize path
+      const docPath = req.file.path.replace(/\\/g, '/');
       const docSize = req.file.size;
 
-      await db.query(`
-        INSERT INTO employee_documents (employee_id, document_type, document_name, file_path, file_size)
-        VALUES (?, ?, ?, ?, ?)
-      `, [id, documentType || 'Other', docName, docPath, docSize]);
+      await supabase.from('employee_documents').insert([{
+        employee_id: id, document_type: documentType || 'Other', document_name: docName, file_path: docPath, file_size: docSize
+      }]);
 
       await logAudit(req, 'UPLOAD_DOCUMENT', `employees/${id}`, null, { type: documentType, name: docName });
 
@@ -498,8 +482,8 @@ const employeeController = {
     const { docId } = req.params;
 
     try {
-      const docs = await db.query('SELECT * FROM employee_documents WHERE id = ?', [docId]);
-      if (docs.length === 0) {
+      const { data: docs, error } = await supabase.from('employee_documents').select('*').eq('id', docId);
+      if (error || !docs || docs.length === 0) {
         return res.status(404).json({ message: 'Document record not found.' });
       }
 
@@ -511,7 +495,7 @@ const employeeController = {
       }
 
       // Delete from database
-      await db.query('DELETE FROM employee_documents WHERE id = ?', [docId]);
+      await supabase.from('employee_documents').delete().eq('id', docId);
 
       await logAudit(req, 'DELETE_DOCUMENT', `employees/${doc.employee_id}`, { name: doc.document_name }, null);
 

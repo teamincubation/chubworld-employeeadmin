@@ -6,7 +6,7 @@ const fs = require('fs');
 
 // Middlewares
 const { authenticateToken, requirePermission } = require('../middleware/authMiddleware');
-const db = require('../config/db');
+const supabase = require('../config/db');
 
 // Controllers
 const authController = require('../controllers/authController');
@@ -182,18 +182,20 @@ router.get('/documents/download/:filename', authenticateToken, async (req, res) 
 
     // 2. If Employee, check if they own the document
     if (req.user.roleName === 'Employee' && req.user.employeeId) {
-      const records = await db.query(`
-        SELECT ed.id 
-        FROM employee_documents ed
-        WHERE ed.employee_id = ? AND ed.file_path LIKE ?
-      `, [req.user.employeeId, `%${filename}%`]);
+      const { data: records } = await supabase
+        .from('employee_documents')
+        .select('id')
+        .eq('employee_id', req.user.employeeId)
+        .ilike('file_path', `%${filename}%`);
 
       // Check if photo is requested
-      const photoRecord = await db.query(`
-        SELECT id FROM employees WHERE id = ? AND photo_path LIKE ?
-      `, [req.user.employeeId, `%${filename}%`]);
+      const { data: photoRecord } = await supabase
+        .from('employees')
+        .select('id')
+        .eq('id', req.user.employeeId)
+        .ilike('photo_path', `%${filename}%`);
 
-      if (records.length > 0 || photoRecord.length > 0) {
+      if ((records && records.length > 0) || (photoRecord && photoRecord.length > 0)) {
         return res.sendFile(path.resolve(filePath));
       }
     }

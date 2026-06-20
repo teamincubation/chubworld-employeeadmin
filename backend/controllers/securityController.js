@@ -1,4 +1,4 @@
-const db = require('../config/db');
+const supabase = require('../config/db');
 const bcrypt = require('bcryptjs');
 const { logAudit } = require('../utils/auditLogger');
 
@@ -7,33 +7,24 @@ const securityController = {
   getAuditLogs: async (req, res) => {
     const { fromDate, toDate, user, actionType } = req.query;
 
-    let query = `
-      SELECT id, user_id, action_type, performed_by, role, target_record, old_value, new_value, ip_address, user_agent, created_at
-      FROM audit_logs
-      WHERE 1=1
-    `;
-    const params = [];
+    let query = supabase.from('audit_logs').select('*').order('id', { ascending: false }).limit(100);
 
     if (fromDate && toDate) {
-      query += ` AND created_at BETWEEN ? AND ?`;
-      params.push(`${fromDate} 00:00:00`, `${toDate} 23:59:59`);
+      query = query.gte('created_at', `${fromDate} 00:00:00`).lte('created_at', `${toDate} 23:59:59`);
     }
 
     if (user) {
-      query += ` AND (performed_by LIKE ? OR role LIKE ?)`;
-      params.push(`%${user}%`, `%${user}%`);
+      query = query.or(`performed_by.ilike.%${user}%,role.ilike.%${user}%`);
     }
 
     if (actionType) {
-      query += ` AND action_type = ?`;
-      params.push(actionType);
+      query = query.eq('action_type', actionType);
     }
 
-    query += ` ORDER BY id DESC LIMIT 100`;
-
     try {
-      const logs = await db.query(query, params);
-      res.json(logs);
+      const { data: logs, error } = await query;
+      if (error) throw error;
+      res.json(logs || []);
     } catch (err) {
       console.error('GetAuditLogs Error:', err.message);
       res.status(500).json({ message: 'Error retrieving system audit logs.' });
@@ -43,13 +34,14 @@ const securityController = {
   // Fetch successful/failed login histories
   getLoginHistory: async (req, res) => {
     try {
-      const history = await db.query(`
-        SELECT id, user_id, email_attempted, ip_address, user_agent, status, remarks, created_at
-        FROM login_history
-        ORDER BY id DESC
-        LIMIT 100
-      `);
-      res.json(history);
+      const { data: history, error } = await supabase
+        .from('login_history')
+        .select('*')
+        .order('id', { ascending: false })
+        .limit(100);
+
+      if (error) throw error;
+      res.json(history || []);
     } catch (err) {
       console.error('GetLoginHistory Error:', err.message);
       res.status(500).json({ message: 'Error retrieving login history logs.' });
@@ -59,12 +51,13 @@ const securityController = {
   // Fetch security event alerts
   getSecurityEvents: async (req, res) => {
     try {
-      const events = await db.query(`
-        SELECT id, severity, event_type, details, ip_address, user_agent, created_at
-        FROM security_events
-        ORDER BY id DESC
-      `);
-      res.json(events);
+      const { data: events, error } = await supabase
+        .from('security_events')
+        .select('*')
+        .order('id', { ascending: false });
+
+      if (error) throw error;
+      res.json(events || []);
     } catch (err) {
       console.error('GetSecurityEvents Error:', err.message);
       res.status(500).json({ message: 'Error retrieving security alerts.' });
@@ -74,15 +67,28 @@ const securityController = {
   // List all users and credential access details
   listUsers: async (req, res) => {
     try {
-      const users = await db.query(`
-        SELECT u.id, u.email, u.status, u.onboarding_completed, r.name AS role_name,
-               e.employee_id, e.full_name
-        FROM users u
-        JOIN roles r ON u.role_id = r.id
-        LEFT JOIN employees e ON e.user_id = u.id
-        ORDER BY u.id ASC
-      `);
-      res.json(users);
+      const { data: users, error } = await supabase
+        .from('users')
+        .select(`
+          id, email, status, onboarding_completed,
+          roles(name),
+          employees(employee_id, full_name)
+        `)
+        .order('id', { ascending: true });
+
+      if (error) throw error;
+
+      const mappedUsers = (users || []).map(u => ({
+        id: u.id,
+        email: u.email,
+        status: u.status,
+        onboarding_completed: u.onboarding_completed,
+        role_name: u.roles ? u.roles.name : null,
+        employee_id: (u.employees && u.employees.length > 0) ? u.employees[0].employee_id : null,
+        full_name: (u.employees && u.employees.length > 0) ? u.employees[0].full_name : null
+      }));
+
+      res.json(mappedUsers);
     } catch (err) {
       console.error('ListUsers Error:', err.message);
       res.status(500).json({ message: 'Error loading user logins list.' });
@@ -99,18 +105,18 @@ const securityController = {
     }
 
     try {
-      const current = await db.query('SELECT email, status FROM users WHERE id = ?', [userId]);
-      if (current.length === 0) {
+      const { data: current, error: curErr } = await supabase.from('users').select('email, status').eq('id', userId);
+      if (curErr || !current || current.length === 0) {
         return res.status(404).json({ message: 'User account not found.' });
       }
 
-      await db.query('UPDATE users SET status = ? WHERE id = ?', [status, userId]);
+      await supabase.from('users').update({ status }).eq('id', userId);
 
       // If user is also employee, update status accordingly
       if (status === 'inactive') {
-        await db.query('UPDATE employees SET status = "Inactive" WHERE user_id = ?', [userId]);
+        await supabase.from('employees').update({ status: 'Inactive' }).eq('user_id', userId);
       } else {
-        await db.query('UPDATE employees SET status = "Active" WHERE user_id = ?', [userId]);
+        await supabase.from('employees').update({ status: 'Active' }).eq('user_id', userId);
       }
 
       // Log Security audit
@@ -133,15 +139,15 @@ const securityController = {
     }
 
     try {
-      const users = await db.query('SELECT email FROM users WHERE id = ?', [userId]);
-      if (users.length === 0) {
+      const { data: users, error } = await supabase.from('users').select('email').eq('id', userId);
+      if (error || !users || users.length === 0) {
         return res.status(404).json({ message: 'User account not found.' });
       }
 
       const salt = await bcrypt.genSalt(10);
       const passHash = await bcrypt.hash(newPassword, salt);
 
-      await db.query('UPDATE users SET password_hash = ? WHERE id = ?', [passHash, userId]);
+      await supabase.from('users').update({ password_hash: passHash }).eq('id', userId);
 
       await logAudit(req, 'ADMIN_RESET_PASSWORD', `users/${userId}`, null, { message: 'Password forcefully reset by admin' });
 
@@ -155,22 +161,28 @@ const securityController = {
   // Roles & Permissions Links
   listRoles: async (req, res) => {
     try {
-      const roles = await db.query('SELECT * FROM roles');
-      const rolePermissions = await db.query(`
-        SELECT rp.role_id, p.id AS permission_id, p.name AS permission_name
-        FROM role_permissions rp
-        JOIN permissions p ON rp.permission_id = p.id
-      `);
+      const { data: roles, error } = await supabase
+        .from('roles')
+        .select(`
+          *,
+          role_permissions(
+            permission_id,
+            permissions(name)
+          )
+        `);
+
+      if (error) throw error;
 
       // Nest permission lists
-      const mapped = roles.map(role => {
-        const perms = rolePermissions
-          .filter(rp => rp.role_id === role.id)
-          .map(rp => ({ id: rp.permission_id, name: rp.permission_name }));
-        return {
-          ...role,
-          permissions: perms
-        };
+      const mapped = (roles || []).map(role => {
+        const perms = (role.role_permissions || []).map(rp => ({
+          id: rp.permission_id,
+          name: rp.permissions ? rp.permissions.name : null
+        })).filter(p => p.name);
+
+        const roleCopy = { ...role, permissions: perms };
+        delete roleCopy.role_permissions;
+        return roleCopy;
       });
 
       res.json(mapped);
@@ -182,8 +194,9 @@ const securityController = {
 
   listPermissions: async (req, res) => {
     try {
-      const list = await db.query('SELECT * FROM permissions');
-      res.json(list);
+      const { data: list, error } = await supabase.from('permissions').select('*');
+      if (error) throw error;
+      res.json(list || []);
     } catch (err) {
       console.error('ListPermissions Error:', err.message);
       res.status(500).json({ message: 'Error loading permissions list.' });
@@ -201,12 +214,12 @@ const securityController = {
 
     try {
       // Clear current mappings
-      await db.query('DELETE FROM role_permissions WHERE role_id = ?', [roleId]);
+      await supabase.from('role_permissions').delete().eq('role_id', roleId);
 
       // Insert new mappings
       if (permissionIds.length > 0) {
-        const values = permissionIds.map(pid => [roleId, pid]);
-        await db.query('INSERT INTO role_permissions (role_id, permission_id) VALUES ?', [values]);
+        const inserts = permissionIds.map(pid => ({ role_id: roleId, permission_id: pid }));
+        await supabase.from('role_permissions').insert(inserts);
       }
 
       await logAudit(req, 'UPDATE_ROLE_PERMISSIONS', `roles/${roleId}`, null, { permissionIds });
@@ -221,8 +234,9 @@ const securityController = {
   // Fetch Settings
   getSystemSettings: async (req, res) => {
     try {
-      const settings = await db.query('SELECT * FROM system_settings');
-      res.json(settings);
+      const { data: settings, error } = await supabase.from('system_settings').select('*');
+      if (error) throw error;
+      res.json(settings || []);
     } catch (err) {
       console.error('GetSystemSettings Error:', err.message);
       res.status(500).json({ message: 'Error loading settings.' });
@@ -234,7 +248,7 @@ const securityController = {
 
     try {
       for (const [key, val] of Object.entries(settings)) {
-        await db.query('UPDATE system_settings SET setting_value = ? WHERE setting_key = ?', [String(val), key]);
+        await supabase.from('system_settings').update({ setting_value: String(val) }).eq('setting_key', key);
       }
 
       await logAudit(req, 'UPDATE_SYSTEM_SETTINGS', 'system_settings', null, settings);

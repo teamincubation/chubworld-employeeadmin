@@ -1,50 +1,19 @@
-const mysql = require('mysql2/promise');
-require('dotenv').config();
+const { createClient } = require('@supabase/supabase-js');
 
-const poolConfig = {
-  host: process.env.DB_HOST || '127.0.0.1',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASS || '',
-  database: process.env.DB_NAME || 'chub_hr',
-  port: process.env.DB_PORT || 3306,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  timezone: '+05:30', // Ensure database works with Asia/Kolkata timezone
-};
+// Initialize the Supabase client using environment variables
+// Make sure SUPABASE_URL and SUPABASE_API_KEY are set in your Hostinger environment
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_API_KEY;
 
-const pool = mysql.createPool(poolConfig);
+let supabase;
 
-// Keep-alive setup and test connection
-(async () => {
-  try {
-    const conn = await pool.getConnection();
-    console.log('Database Connected Successfully! Timezone set to IST (+05:30)');
-    
-    // Set session timezone explicitly to confirm
-    await conn.query("SET time_zone = '+05:30'");
-    conn.release();
-  } catch (err) {
-    console.error('Database connection failed:', err.message);
-  }
-})();
+if (supabaseUrl && supabaseKey) {
+  supabase = createClient(supabaseUrl, supabaseKey);
+  console.log('✅ Supabase Client Initialized Successfully.');
+} else {
+  console.warn('⚠️ SUPABASE_URL or SUPABASE_API_KEY is missing. Database connection will fail.');
+  // Create a dummy client to prevent instant crash before env vars are loaded
+  supabase = createClient('https://dummy.supabase.co', 'dummy-key'); 
+}
 
-module.exports = {
-  pool,
-  // Helper for direct queries
-  query: async (sql, params) => {
-    let conn;
-    try {
-      conn = await pool.getConnection();
-      // Enforce time zone for each session
-      await conn.query("SET time_zone = '+05:30'");
-      const [results] = await conn.query(sql, params);
-      return results;
-    } catch (err) {
-      console.error(`Query Error: [${sql}] - Details: ${err.message}`);
-      throw err;
-    } finally {
-      if (conn) conn.release();
-    }
-  }
-};
+module.exports = supabase;

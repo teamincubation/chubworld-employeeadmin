@@ -1,4 +1,4 @@
-const db = require('../config/db');
+const supabase = require('../config/db');
 const { logAudit } = require('../utils/auditLogger');
 const fs = require('fs');
 
@@ -13,24 +13,32 @@ const leaveController = {
     try {
       const year = new Date().getFullYear();
       
-      // Fetch balances linked to active types
-      const balances = await db.query(`
-        SELECT lb.*, lt.name AS leave_name, lt.code AS leave_code
-        FROM leave_balances lb
-        JOIN leave_types lt ON lb.leave_type_id = lt.id
-        WHERE lb.employee_id = ? AND lb.year = ? AND lt.active = TRUE
-      `, [employeeId, year]);
+      const { data: balances } = await supabase
+        .from('leave_balances')
+        .select('*, leave_types!inner(name, code, active)')
+        .eq('employee_id', employeeId)
+        .eq('year', year)
+        .eq('leave_types.active', true);
 
-      // Fetch requests
-      const requests = await db.query(`
-        SELECT lr.*, lt.name AS leave_name, lt.code AS leave_code
-        FROM leave_requests lr
-        JOIN leave_types lt ON lr.leave_type_id = lt.id
-        WHERE lr.employee_id = ?
-        ORDER BY lr.id DESC
-      `, [employeeId]);
+      const { data: requests } = await supabase
+        .from('leave_requests')
+        .select('*, leave_types(name, code)')
+        .eq('employee_id', employeeId)
+        .order('id', { ascending: false });
 
-      res.json({ balances, requests });
+      const mappedBalances = (balances || []).map(b => ({
+        ...b,
+        leave_name: b.leave_types ? b.leave_types.name : null,
+        leave_code: b.leave_types ? b.leave_types.code : null
+      }));
+
+      const mappedRequests = (requests || []).map(r => ({
+        ...r,
+        leave_name: r.leave_types ? r.leave_types.name : null,
+        leave_code: r.leave_types ? r.leave_types.code : null
+      }));
+
+      res.json({ balances: mappedBalances, requests: mappedRequests });
     } catch (err) {
       console.error('GetEmployeeLeaves Error:', err.message);
       res.status(500).json({ message: 'Error retrieving leave records.' });
@@ -44,15 +52,11 @@ const leaveController = {
     const attachmentPath = req.file ? req.file.path.replace(/\\/g, '/') : null;
 
     if (!leaveTypeId || !fromDate || !toDate || !reason) {
-      // Clean up uploaded file if validation fails
-      if (req.file && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
+      if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
       return res.status(400).json({ message: 'Leave type, dates, and reason are required.' });
     }
 
     try {
-      // Calculate total leave days
       const fDate = new Date(fromDate);
       const tDate = new Date(toDate);
       if (tDate < fDate) {
@@ -63,25 +67,23 @@ const leaveController = {
       const diffTime = Math.abs(tDate - fDate);
       const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
-      // Verify leave type configuration
-      const leaveTypes = await db.query('SELECT * FROM leave_types WHERE id = ? AND active = TRUE', [leaveTypeId]);
-      if (leaveTypes.length === 0) {
+      const { data: leaveTypes } = await supabase.from('leave_types').select('*').eq('id', leaveTypeId).eq('active', true);
+      if (!leaveTypes || leaveTypes.length === 0) {
         if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
         return res.status(404).json({ message: 'Selected leave type is inactive or invalid.' });
       }
       const leaveType = leaveTypes[0];
 
-      // If sick leave, check if prolonged sick leave configuration mandates a medical certificate upload
       if (leaveType.code === 'SL' && totalDays >= leaveType.requires_medical_certificate_days && !attachmentPath) {
         return res.status(400).json({ 
           message: `Medical certificate upload is mandatory for sick leaves extending ${leaveType.requires_medical_certificate_days} days or more.` 
         });
       }
 
-      // Check current available balance
       const year = fDate.getFullYear();
-      const balances = await db.query('SELECT * FROM leave_balances WHERE employee_id = ? AND leave_type_id = ? AND year = ?', [employeeId, leaveTypeId, year]);
-      if (balances.length === 0) {
+      const { data: balances } = await supabase.from('leave_balances').select('*').eq('employee_id', employeeId).eq('leave_type_id', leaveTypeId).eq('year', year);
+      
+      if (!balances || balances.length === 0) {
         if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
         return res.status(400).json({ message: 'No leave balance allocated for this leave type this year.' });
       }
@@ -90,23 +92,17 @@ const leaveController = {
       const available = balance.total_days - balance.availed_days - balance.pending_days;
       if (totalDays > available) {
         if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-        return res.status(400).json({ 
-          message: `Insufficient leave balance. Requested: ${totalDays} days. Available: ${available} days.` 
-        });
+        return res.status(400).json({ message: `Insufficient leave balance. Requested: ${totalDays} days. Available: ${available} days.` });
       }
 
-      // Record request
-      await db.query(`
-        INSERT INTO leave_requests (employee_id, leave_type_id, from_date, to_date, total_days, reason, attachment_path, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending')
-      `, [employeeId, leaveTypeId, fromDate, toDate, totalDays, reason, attachmentPath]);
+      await supabase.from('leave_requests').insert([{
+        employee_id: employeeId, leave_type_id: leaveTypeId, from_date: fromDate, to_date: toDate, 
+        total_days: totalDays, reason, attachment_path: attachmentPath, status: 'Pending'
+      }]);
 
-      // Deduct/adjust pending balance
-      await db.query(`
-        UPDATE leave_balances 
-        SET pending_days = pending_days + ? 
-        WHERE id = ?
-      `, [totalDays, balance.id]);
+      await supabase.from('leave_balances').update({
+        pending_days: balance.pending_days + totalDays
+      }).eq('id', balance.id);
 
       res.status(201).json({ message: 'Leave request submitted successfully. Awaiting manager approval.' });
     } catch (err) {
@@ -122,8 +118,8 @@ const leaveController = {
     const employeeId = req.user.employeeId;
 
     try {
-      const requests = await db.query('SELECT * FROM leave_requests WHERE id = ? AND employee_id = ?', [id, employeeId]);
-      if (requests.length === 0) {
+      const { data: requests } = await supabase.from('leave_requests').select('*').eq('id', id).eq('employee_id', employeeId);
+      if (!requests || requests.length === 0) {
         return res.status(404).json({ message: 'Leave request not found.' });
       }
 
@@ -132,18 +128,17 @@ const leaveController = {
         return res.status(400).json({ message: 'Only pending leave requests can be cancelled.' });
       }
 
-      // Update status
-      await db.query('UPDATE leave_requests SET status = "Cancelled" WHERE id = ?', [id]);
+      await supabase.from('leave_requests').update({ status: 'Cancelled' }).eq('id', id);
 
-      // Revert pending balance
       const year = new Date(request.from_date).getFullYear();
-      await db.query(`
-        UPDATE leave_balances 
-        SET pending_days = pending_days - ? 
-        WHERE employee_id = ? AND leave_type_id = ? AND year = ?
-      `, [request.total_days, employeeId, request.leave_type_id, year]);
+      const { data: balData } = await supabase.from('leave_balances').select('id, pending_days').eq('employee_id', employeeId).eq('leave_type_id', request.leave_type_id).eq('year', year).single();
+      
+      if (balData) {
+        await supabase.from('leave_balances').update({
+          pending_days: balData.pending_days - request.total_days
+        }).eq('id', balData.id);
+      }
 
-      // Delete attachment if exists
       if (request.attachment_path && fs.existsSync(request.attachment_path)) {
         fs.unlinkSync(request.attachment_path);
       }
@@ -158,15 +153,21 @@ const leaveController = {
   // List Leave Requests (Admin / HR)
   listAdminRequests: async (req, res) => {
     try {
-      const list = await db.query(`
-        SELECT lr.*, e.employee_id, e.full_name, d.name AS department_name, lt.name AS leave_name, lt.code AS leave_code
-        FROM leave_requests lr
-        JOIN employees e ON lr.employee_id = e.id
-        LEFT JOIN departments d ON e.department_id = d.id
-        JOIN leave_types lt ON lr.leave_type_id = lt.id
-        ORDER BY lr.id DESC
-      `);
-      res.json(list);
+      const { data: list } = await supabase
+        .from('leave_requests')
+        .select('*, employees(employee_id, full_name, departments(name)), leave_types(name, code)')
+        .order('id', { ascending: false });
+
+      const mappedList = (list || []).map(r => ({
+        ...r,
+        employee_id_str: r.employees ? r.employees.employee_id : null,
+        full_name: r.employees ? r.employees.full_name : null,
+        department_name: (r.employees && r.employees.departments) ? r.employees.departments.name : null,
+        leave_name: r.leave_types ? r.leave_types.name : null,
+        leave_code: r.leave_types ? r.leave_types.code : null
+      }));
+
+      res.json(mappedList);
     } catch (err) {
       console.error('List Admin Leave Requests Error:', err.message);
       res.status(500).json({ message: 'Error fetching leave log.' });
@@ -176,15 +177,15 @@ const leaveController = {
   // Approve / Reject Leave Request (Admin / HR)
   approveLeave: async (req, res) => {
     const { id } = req.params;
-    const { status, remarks } = req.body; // status: Approved or Rejected
+    const { status, remarks } = req.body; 
 
     if (!['Approved', 'Rejected'].includes(status)) {
       return res.status(400).json({ message: 'Status must be Approved or Rejected.' });
     }
 
     try {
-      const requests = await db.query('SELECT * FROM leave_requests WHERE id = ?', [id]);
-      if (requests.length === 0) {
+      const { data: requests } = await supabase.from('leave_requests').select('*').eq('id', id);
+      if (!requests || requests.length === 0) {
         return res.status(404).json({ message: 'Leave request not found.' });
       }
 
@@ -193,46 +194,39 @@ const leaveController = {
         return res.status(400).json({ message: 'This leave request has already been processed.' });
       }
 
-      // Update status
-      await db.query(`
-        UPDATE leave_requests SET
-          status = ?, approved_by = ?, approved_at = CURRENT_TIMESTAMP, remarks = ?
-        WHERE id = ?
-      `, [status, req.user.id, remarks || null, id]);
+      await supabase.from('leave_requests').update({
+        status, approved_by: req.user.id, approved_at: new Date().toISOString(), remarks: remarks || null
+      }).eq('id', id);
 
-      // Adjust balances
       const year = new Date(request.from_date).getFullYear();
-      if (status === 'Approved') {
-        // Transfer from pending_days to availed_days
-        await db.query(`
-          UPDATE leave_balances SET
-            pending_days = pending_days - ?,
-            availed_days = availed_days + ?
-          WHERE employee_id = ? AND leave_type_id = ? AND year = ?
-        `, [request.total_days, request.total_days, request.employee_id, request.leave_type_id, year]);
+      const { data: balData } = await supabase.from('leave_balances').select('id, pending_days, availed_days').eq('employee_id', request.employee_id).eq('leave_type_id', request.leave_type_id).eq('year', year).single();
 
-        // Insert placeholder into attendance logs for these dates so they are marked as 'Leave'
-        const start = new Date(request.from_date);
-        const end = new Date(request.to_date);
-        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-          const dateStr = d.toISOString().split('T')[0];
-          // Try inserting, ignore if duplicate clock-in already exists (though leaves usually override)
-          await db.query(`
-            INSERT INTO attendance_logs (employee_id, date, clock_in_time, clock_in_location_status, status)
-            VALUES (?, ?, '00:00:00', 'Location Not Verified', 'Leave')
-            ON DUPLICATE KEY UPDATE status = 'Leave'
-          `, [request.employee_id, dateStr]);
+      if (balData) {
+        if (status === 'Approved') {
+          await supabase.from('leave_balances').update({
+            pending_days: balData.pending_days - request.total_days,
+            availed_days: balData.availed_days + request.total_days
+          }).eq('id', balData.id);
+
+          const start = new Date(request.from_date);
+          const end = new Date(request.to_date);
+          const upserts = [];
+          for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+            const dateStr = d.toISOString().split('T')[0];
+            upserts.push({
+              employee_id: request.employee_id, date: dateStr, clock_in_time: '00:00:00', clock_in_location_status: 'Location Not Verified', status: 'Leave'
+            });
+          }
+          if (upserts.length > 0) {
+            await supabase.from('attendance_logs').upsert(upserts, { onConflict: 'employee_id,date' });
+          }
+        } else {
+          await supabase.from('leave_balances').update({
+            pending_days: balData.pending_days - request.total_days
+          }).eq('id', balData.id);
         }
-      } else {
-        // Status Rejected: Revert pending_days
-        await db.query(`
-          UPDATE leave_balances SET
-            pending_days = pending_days - ?
-          WHERE employee_id = ? AND leave_type_id = ? AND year = ?
-        `, [request.total_days, request.employee_id, request.leave_type_id, year]);
       }
 
-      // Audit Log
       await logAudit(req, `LEAVE_REQUEST_${status.toUpperCase()}`, `leave_requests/${id}`, request, { status, remarks });
 
       res.json({ message: `Leave request has been ${status.toLowerCase()} successfully.` });
@@ -251,28 +245,22 @@ const leaveController = {
 
     try {
       const year = new Date().getFullYear();
-      const balances = await db.query('SELECT * FROM leave_balances WHERE employee_id = ? AND leave_type_id = ? AND year = ?', [employeeId, leaveTypeId, year]);
+      const { data: balances } = await supabase.from('leave_balances').select('*').eq('employee_id', employeeId).eq('leave_type_id', leaveTypeId).eq('year', year);
       
       let oldBalance = null;
-      if (balances.length > 0) {
+      if (balances && balances.length > 0) {
         const bal = balances[0];
         oldBalance = { ...bal };
-        await db.query(`
-          UPDATE leave_balances 
-          SET total_days = total_days + ? 
-          WHERE id = ?
-        `, [adjustmentDays, bal.id]);
+        await supabase.from('leave_balances').update({
+          total_days: bal.total_days + adjustmentDays
+        }).eq('id', bal.id);
       } else {
-        // Create balance record if missing
-        await db.query(`
-          INSERT INTO leave_balances (employee_id, leave_type_id, total_days, availed_days, pending_days, year)
-          VALUES (?, ?, ?, 0.00, 0.00, ?)
-        `, [employeeId, leaveTypeId, adjustmentDays, year]);
+        await supabase.from('leave_balances').insert([{
+          employee_id: employeeId, leave_type_id: leaveTypeId, total_days: adjustmentDays, availed_days: 0.00, pending_days: 0.00, year
+        }]);
       }
 
-      const updated = await db.query('SELECT * FROM leave_balances WHERE employee_id = ? AND leave_type_id = ? AND year = ?', [employeeId, leaveTypeId, year]);
-
-      // Audit logs must track manual adjustments
+      const { data: updated } = await supabase.from('leave_balances').select('*').eq('employee_id', employeeId).eq('leave_type_id', leaveTypeId).eq('year', year);
       await logAudit(req, 'LEAVE_BALANCE_ADJUSTED', `employees/${employeeId}/leaves`, oldBalance, { updated: updated[0], remarks });
 
       res.json({ message: 'Leave balance adjusted successfully.' });
@@ -285,8 +273,8 @@ const leaveController = {
   // Fetch all leave types
   getLeaveTypes: async (req, res) => {
     try {
-      const list = await db.query('SELECT * FROM leave_types WHERE active = TRUE');
-      res.json(list);
+      const { data: list } = await supabase.from('leave_types').select('*').eq('active', true);
+      res.json(list || []);
     } catch (err) {
       console.error('GetLeaveTypes Error:', err.message);
       res.status(500).json({ message: 'Error loading leave types.' });

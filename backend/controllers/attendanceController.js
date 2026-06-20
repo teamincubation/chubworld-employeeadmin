@@ -1,4 +1,4 @@
-const db = require('../config/db');
+const supabase = require('../config/db');
 const { logAudit } = require('../utils/auditLogger');
 
 /**
@@ -6,7 +6,6 @@ const { logAudit } = require('../utils/auditLogger');
  */
 function getISTDate() {
   const now = new Date();
-  // IST offset is UTC+5.5 hours = 330 minutes
   const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
   return new Date(utc + (3600000 * 5.5));
 }
@@ -41,7 +40,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 }
 
 const attendanceController = {
-  // Check Today's status (for active employee rendering)
+  // Check Today's status
   getTodayStatus: async (req, res) => {
     const employeeId = req.user.employeeId;
     if (!employeeId) {
@@ -50,20 +49,23 @@ const attendanceController = {
 
     try {
       const todayStr = getISTDateString();
-      const logs = await db.query('SELECT * FROM attendance_logs WHERE employee_id = ? AND date = ?', [employeeId, todayStr]);
-      
+      const { data: logs, error: logErr } = await supabase
+        .from('attendance_logs')
+        .select('*')
+        .eq('employee_id', employeeId)
+        .eq('date', todayStr);
+
       // Fetch shift assignment
-      const shifts = await db.query(`
-        SELECT s.* 
-        FROM employee_shift_assignments esa
-        JOIN shifts s ON esa.shift_id = s.id
-        WHERE esa.employee_id = ? AND (esa.end_date IS NULL OR esa.end_date >= ?)
-        LIMIT 1
-      `, [employeeId, todayStr]);
+      const { data: assignments, error: shiftErr } = await supabase
+        .from('employee_shift_assignments')
+        .select('*, shifts(*)')
+        .eq('employee_id', employeeId)
+        .or(`end_date.is.null,end_date.gte.${todayStr}`)
+        .limit(1);
 
-      const shift = shifts.length > 0 ? shifts[0] : null;
+      const shift = (assignments && assignments.length > 0 && assignments[0].shifts) ? assignments[0].shifts : null;
 
-      if (logs.length === 0) {
+      if (!logs || logs.length === 0) {
         return res.json({ status: 'not_clocked_in', shift });
       }
 
@@ -96,57 +98,51 @@ const attendanceController = {
       const nowTimeStr = getISTTimeString(istDateObj);
 
       // Prevent duplicate clock-in
-      const existing = await db.query('SELECT id FROM attendance_logs WHERE employee_id = ? AND date = ?', [employeeId, todayStr]);
-      if (existing.length > 0) {
+      const { data: existing } = await supabase.from('attendance_logs').select('id').eq('employee_id', employeeId).eq('date', todayStr);
+      if (existing && existing.length > 0) {
         return res.status(400).json({ message: 'You have already clocked in for today.' });
       }
 
       // Fetch employee's office location preferences
-      const empDetails = await db.query(`
-        SELECT e.work_location_id, wl.latitude AS office_lat, wl.longitude AS office_lon, 
-               wl.radius_meters, wl.allow_without_location, wl.name AS office_name
-        FROM employees e
-        LEFT JOIN work_locations wl ON e.work_location_id = wl.id
-        WHERE e.id = ?
-      `, [employeeId]);
+      const { data: empDetails } = await supabase
+        .from('employees')
+        .select('work_location_id, work_locations(latitude, longitude, radius_meters, allow_without_location, name)')
+        .eq('id', employeeId);
 
-      if (empDetails.length === 0) {
+      if (!empDetails || empDetails.length === 0) {
         return res.status(404).json({ message: 'Employee record not found.' });
       }
 
       const emp = empDetails[0];
+      const wl = emp.work_locations || {};
       let locationStatus = 'Location Not Verified';
 
-      if (emp.work_location_id) {
+      if (emp.work_location_id && wl.latitude) {
         if (latitude && longitude) {
-          const distance = calculateDistance(latitude, longitude, emp.office_lat, emp.office_lon);
-          if (distance <= emp.radius_meters) {
+          const distance = calculateDistance(latitude, longitude, wl.latitude, wl.longitude);
+          if (distance <= wl.radius_meters) {
             locationStatus = 'Verified-Inside';
           } else {
             locationStatus = 'Verified-Outside';
           }
         } else {
-          // No coordinates received
-          if (!emp.allow_without_location) {
-            return res.status(400).json({ 
-              message: 'Clock-in blocked: Sharing your GPS location is mandatory for this work site.' 
-            });
+          if (!wl.allow_without_location) {
+            return res.status(400).json({ message: 'Clock-in blocked: Sharing your GPS location is mandatory for this work site.' });
           }
         }
       }
 
-      // Fetch employee's shift to compute shift grace period and late marks
-      const shifts = await db.query(`
-        SELECT s.* 
-        FROM employee_shift_assignments esa
-        JOIN shifts s ON esa.shift_id = s.id
-        WHERE esa.employee_id = ? AND (esa.end_date IS NULL OR esa.end_date >= ?)
-        LIMIT 1
-      `, [employeeId, todayStr]);
+      // Fetch employee's shift
+      const { data: assignments } = await supabase
+        .from('employee_shift_assignments')
+        .select('shifts(*)')
+        .eq('employee_id', employeeId)
+        .or(`end_date.is.null,end_date.gte.${todayStr}`)
+        .limit(1);
 
       let recordStatus = 'Present';
-      if (shifts.length > 0) {
-        const shift = shifts[0];
+      if (assignments && assignments.length > 0 && assignments[0].shifts) {
+        const shift = assignments[0].shifts;
         const [shHour, shMin] = shift.start_time.split(':').map(Number);
         const [inHour, inMin] = nowTimeStr.split(':').map(Number);
 
@@ -163,17 +159,11 @@ const attendanceController = {
       }
 
       // Save log
-      await db.query(`
-        INSERT INTO attendance_logs (
-          employee_id, date, clock_in_time, 
-          clock_in_latitude, clock_in_longitude, clock_in_accuracy, 
-          clock_in_ip, clock_in_user_agent, clock_in_location_status, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [
-        employeeId, todayStr, nowTimeStr,
-        latitude || null, longitude || null, accuracy || null,
-        ip, userAgent, locationStatus, recordStatus
-      ]);
+      await supabase.from('attendance_logs').insert([{
+        employee_id: employeeId, date: todayStr, clock_in_time: nowTimeStr, 
+        clock_in_latitude: latitude || null, clock_in_longitude: longitude || null, clock_in_accuracy: accuracy || null, 
+        clock_in_ip: ip, clock_in_user_agent: userAgent, clock_in_location_status: locationStatus, status: recordStatus
+      }]);
 
       res.status(201).json({ 
         message: 'Clocked-in successfully!', 
@@ -203,9 +193,8 @@ const attendanceController = {
       const todayStr = getISTDateString(istDateObj);
       const nowTimeStr = getISTTimeString(istDateObj);
 
-      // Verify clock-in exists
-      const existing = await db.query('SELECT * FROM attendance_logs WHERE employee_id = ? AND date = ?', [employeeId, todayStr]);
-      if (existing.length === 0) {
+      const { data: existing } = await supabase.from('attendance_logs').select('*').eq('employee_id', employeeId).eq('date', todayStr);
+      if (!existing || existing.length === 0) {
         return res.status(400).json({ message: 'You have not clocked in for today yet.' });
       }
 
@@ -214,31 +203,26 @@ const attendanceController = {
         return res.status(400).json({ message: 'You have already clocked out for today.' });
       }
 
-      // Validate location status
-      const empDetails = await db.query(`
-        SELECT e.work_location_id, wl.latitude AS office_lat, wl.longitude AS office_lon, 
-               wl.radius_meters, wl.allow_without_location
-        FROM employees e
-        LEFT JOIN work_locations wl ON e.work_location_id = wl.id
-        WHERE e.id = ?
-      `, [employeeId]);
+      const { data: empDetails } = await supabase
+        .from('employees')
+        .select('work_location_id, work_locations(latitude, longitude, radius_meters, allow_without_location)')
+        .eq('id', employeeId);
 
       const emp = empDetails[0];
+      const wl = emp.work_locations || {};
       let locationStatus = 'Location Not Verified';
 
-      if (emp.work_location_id) {
+      if (emp.work_location_id && wl.latitude) {
         if (latitude && longitude) {
-          const distance = calculateDistance(latitude, longitude, emp.office_lat, emp.office_lon);
-          if (distance <= emp.radius_meters) {
+          const distance = calculateDistance(latitude, longitude, wl.latitude, wl.longitude);
+          if (distance <= wl.radius_meters) {
             locationStatus = 'Verified-Inside';
           } else {
             locationStatus = 'Verified-Outside';
           }
         } else {
-          if (!emp.allow_without_location) {
-            return res.status(400).json({ 
-              message: 'Clock-out blocked: Sharing your GPS location is mandatory for this work site.' 
-            });
+          if (!wl.allow_without_location) {
+            return res.status(400).json({ message: 'Clock-out blocked: Sharing your GPS location is mandatory for this work site.' });
           }
         }
       }
@@ -251,26 +235,17 @@ const attendanceController = {
       const outTotalSecs = outH * 3600 + outM * 60 + outS;
       const activeHours = parseFloat(((outTotalSecs - inTotalSecs) / 3600).toFixed(2));
 
-      // Decide status (e.g. Half Day if worked < 4 hours)
       let finalStatus = logRecord.status;
       if (activeHours < 4.0 && finalStatus !== 'Location Not Verified') {
         finalStatus = 'Half Day';
       }
 
-      await db.query(`
-        UPDATE attendance_logs SET
-          clock_out_time = ?, 
-          clock_out_latitude = ?, clock_out_longitude = ?, clock_out_accuracy = ?,
-          clock_out_ip = ?, clock_out_user_agent = ?, clock_out_location_status = ?,
-          total_hours = ?, status = ?
-        WHERE id = ?
-      `, [
-        nowTimeStr,
-        latitude || null, longitude || null, accuracy || null,
-        ip, userAgent, locationStatus,
-        activeHours, finalStatus,
-        logRecord.id
-      ]);
+      await supabase.from('attendance_logs').update({
+        clock_out_time: nowTimeStr, 
+        clock_out_latitude: latitude || null, clock_out_longitude: longitude || null, clock_out_accuracy: accuracy || null,
+        clock_out_ip: ip, clock_out_user_agent: userAgent, clock_out_location_status: locationStatus,
+        total_hours: activeHours, status: finalStatus
+      }).eq('id', logRecord.id);
 
       res.json({
         message: 'Clocked-out successfully!',
@@ -294,21 +269,17 @@ const attendanceController = {
     }
 
     try {
-      // Find matching attendance record if any
-      const existing = await db.query('SELECT id FROM attendance_logs WHERE employee_id = ? AND date = ?', [employeeId, date]);
-      const logId = existing.length > 0 ? existing[0].id : null;
+      const { data: existing } = await supabase.from('attendance_logs').select('id').eq('employee_id', employeeId).eq('date', date);
+      const logId = (existing && existing.length > 0) ? existing[0].id : null;
 
-      // Ensure no active pending request for same date
-      const pending = await db.query('SELECT id FROM attendance_corrections WHERE employee_id = ? AND date = ? AND status = "Pending"', [employeeId, date]);
-      if (pending.length > 0) {
+      const { data: pending } = await supabase.from('attendance_corrections').select('id').eq('employee_id', employeeId).eq('date', date).eq('status', 'Pending');
+      if (pending && pending.length > 0) {
         return res.status(400).json({ message: 'You already have a pending correction request for this date.' });
       }
 
-      await db.query(`
-        INSERT INTO attendance_corrections (
-          attendance_log_id, employee_id, date, requested_clock_in, requested_clock_out, reason, status
-        ) VALUES (?, ?, ?, ?, ?, ?, 'Pending')
-      `, [logId, employeeId, date, requestedClockIn || null, requestedClockOut || null, reason]);
+      await supabase.from('attendance_corrections').insert([{
+        attendance_log_id: logId, employee_id: employeeId, date, requested_clock_in: requestedClockIn || null, requested_clock_out: requestedClockOut || null, reason, status: 'Pending'
+      }]);
 
       res.json({ message: 'Correction request submitted to manager review.' });
     } catch (err) {
@@ -317,35 +288,40 @@ const attendanceController = {
     }
   },
 
-  // List Correction requests (Admin / HR)
+  // List Correction requests
   listCorrections: async (req, res) => {
     try {
-      const list = await db.query(`
-        SELECT ac.*, e.employee_id, e.full_name, d.name AS department_name
-        FROM attendance_corrections ac
-        JOIN employees e ON ac.employee_id = e.id
-        LEFT JOIN departments d ON e.department_id = d.id
-        ORDER BY ac.id DESC
-      `);
-      res.json(list);
+      const { data: list } = await supabase
+        .from('attendance_corrections')
+        .select('*, employees(employee_id, full_name, departments(name))')
+        .order('id', { ascending: false });
+
+      const mappedList = (list || []).map(ac => ({
+        ...ac,
+        employee_id_str: ac.employees ? ac.employees.employee_id : null,
+        full_name: ac.employees ? ac.employees.full_name : null,
+        department_name: (ac.employees && ac.employees.departments) ? ac.employees.departments.name : null
+      }));
+
+      res.json(mappedList);
     } catch (err) {
       console.error('List Corrections Error:', err.message);
       res.status(500).json({ message: 'Error fetching correction log.' });
     }
   },
 
-  // Approve / Reject Correction Request (Admin / HR)
+  // Approve / Reject Correction Request
   approveCorrection: async (req, res) => {
     const { correctionId } = req.params;
-    const { status, remarks } = req.body; // status: Approved or Rejected
+    const { status, remarks } = req.body; 
 
     if (!['Approved', 'Rejected'].includes(status)) {
       return res.status(400).json({ message: 'Status must be Approved or Rejected.' });
     }
 
     try {
-      const corrections = await db.query('SELECT * FROM attendance_corrections WHERE id = ?', [correctionId]);
-      if (corrections.length === 0) {
+      const { data: corrections } = await supabase.from('attendance_corrections').select('*').eq('id', correctionId);
+      if (!corrections || corrections.length === 0) {
         return res.status(404).json({ message: 'Correction request not found.' });
       }
 
@@ -354,14 +330,10 @@ const attendanceController = {
         return res.status(400).json({ message: 'This request has already been processed.' });
       }
 
-      // Update correction status
-      await db.query(`
-        UPDATE attendance_corrections SET
-          status = ?, approved_by = ?, approved_at = CURRENT_TIMESTAMP, remarks = ?
-        WHERE id = ?
-      `, [status, req.user.id, remarks || null, correctionId]);
+      await supabase.from('attendance_corrections').update({
+        status, approved_by: req.user.id, approved_at: new Date().toISOString(), remarks: remarks || null
+      }).eq('id', correctionId);
 
-      // If approved, update or insert attendance logs
       if (status === 'Approved') {
         const checkIn = corr.requested_clock_in;
         const checkOut = corr.requested_clock_out;
@@ -374,36 +346,27 @@ const attendanceController = {
         }
 
         let recordStatus = 'Present';
-        if (activeHours < 4.0) {
-          recordStatus = 'Half Day';
-        }
+        if (activeHours < 4.0) recordStatus = 'Half Day';
 
         if (corr.attendance_log_id) {
-          // Update existing log
-          await db.query(`
-            UPDATE attendance_logs SET
-              clock_in_time = COALESCE(?, clock_in_time),
-              clock_out_time = COALESCE(?, clock_out_time),
-              total_hours = ?,
-              status = ?,
-              clock_in_location_status = 'Verified-Inside', -- Overwrite as verified due to correction
-              clock_out_location_status = 'Verified-Inside'
-            WHERE id = ?
-          `, [checkIn, checkOut, activeHours, recordStatus, corr.attendance_log_id]);
+          const { data: exLog } = await supabase.from('attendance_logs').select('clock_in_time, clock_out_time').eq('id', corr.attendance_log_id).single();
+          await supabase.from('attendance_logs').update({
+            clock_in_time: checkIn || exLog.clock_in_time,
+            clock_out_time: checkOut || exLog.clock_out_time,
+            total_hours: activeHours,
+            status: recordStatus,
+            clock_in_location_status: 'Verified-Inside',
+            clock_out_location_status: 'Verified-Inside'
+          }).eq('id', corr.attendance_log_id);
         } else {
-          // Create new log record
-          await db.query(`
-            INSERT INTO attendance_logs (
-              employee_id, date, clock_in_time, clock_out_time, 
-              clock_in_location_status, clock_out_location_status, total_hours, status
-            ) VALUES (?, ?, ?, ?, 'Verified-Inside', 'Verified-Inside', ?, ?)
-          `, [corr.employee_id, corr.date, checkIn || '09:00:00', checkOut, activeHours, recordStatus]);
+          await supabase.from('attendance_logs').insert([{
+            employee_id: corr.employee_id, date: corr.date, clock_in_time: checkIn || '09:00:00', clock_out_time: checkOut, 
+            clock_in_location_status: 'Verified-Inside', clock_out_location_status: 'Verified-Inside', total_hours: activeHours, status: recordStatus
+          }]);
         }
       }
 
-      // Record Audit trail
       await logAudit(req, `ATTENDANCE_CORRECTION_${status.toUpperCase()}`, `attendance_corrections/${correctionId}`, corr, { status, remarks });
-
       res.json({ message: `Correction request has been ${status.toLowerCase()} successfully.` });
     } catch (err) {
       console.error('Approve Correction Error:', err.message);
@@ -411,58 +374,53 @@ const attendanceController = {
     }
   },
 
-  // Fetch Attendance Logs for ESS (Employee personal log)
+  // Fetch Attendance Logs for ESS
   getEmployeeLogs: async (req, res) => {
     const employeeId = req.user.employeeId;
-    if (!employeeId) {
-      return res.status(400).json({ message: 'No mapped employee record.' });
-    }
+    if (!employeeId) return res.status(400).json({ message: 'No mapped employee record.' });
 
     try {
-      const logs = await db.query(`
-        SELECT * FROM attendance_logs 
-        WHERE employee_id = ? 
-        ORDER BY date DESC 
-        LIMIT 90
-      `, [employeeId]);
-      res.json(logs);
+      const { data: logs } = await supabase.from('attendance_logs').select('*').eq('employee_id', employeeId).order('date', { ascending: false }).limit(90);
+      res.json(logs || []);
     } catch (err) {
       console.error('GetEmployeeLogs Error:', err.message);
       res.status(500).json({ message: 'Error retrieving your attendance history.' });
     }
   },
 
-  // Fetch Admin Attendance Logs (with date filter, department filter)
+  // Fetch Admin Attendance Logs
   getAdminLogs: async (req, res) => {
     const { fromDate, toDate, departmentId } = req.query;
 
-    let query = `
-      SELECT al.*, e.employee_id, e.full_name, d.name AS department_name
-      FROM attendance_logs al
-      JOIN employees e ON al.employee_id = e.id
-      LEFT JOIN departments d ON e.department_id = d.id
-      WHERE 1=1
-    `;
-    const params = [];
+    let query = supabase
+      .from('attendance_logs')
+      .select('*, employees!inner(employee_id, full_name, department_id, departments(name))')
+      .order('date', { ascending: false })
+      .order('clock_in_time', { ascending: false });
 
     if (fromDate && toDate) {
-      query += ` AND al.date BETWEEN ? AND ?`;
-      params.push(fromDate, toDate);
+      query = query.gte('date', fromDate).lte('date', toDate);
     } else {
-      // Default to last 30 days
-      query += ` AND al.date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)`;
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      query = query.gte('date', thirtyDaysAgo);
     }
 
     if (departmentId) {
-      query += ` AND e.department_id = ?`;
-      params.push(departmentId);
+      query = query.eq('employees.department_id', departmentId);
     }
 
-    query += ` ORDER BY al.date DESC, al.clock_in_time DESC`;
-
     try {
-      const logs = await db.query(query, params);
-      res.json(logs);
+      const { data: logs, error } = await query;
+      if (error) throw error;
+
+      const mappedLogs = logs.map(l => ({
+        ...l,
+        employee_id_str: l.employees.employee_id,
+        full_name: l.employees.full_name,
+        department_name: l.employees.departments ? l.employees.departments.name : null
+      }));
+
+      res.json(mappedLogs);
     } catch (err) {
       console.error('GetAdminLogs Error:', err.message);
       res.status(500).json({ message: 'Error retrieving employee logs.' });

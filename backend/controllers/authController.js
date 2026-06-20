@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const db = require('../config/db');
+const supabase = require('../config/db');
 const { logAudit } = require('../utils/auditLogger');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'chub_super_secret_jwt_key_2026_creating_wow_world';
@@ -12,10 +12,15 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
  */
 async function recordLoginHistory(userId, email, ip, userAgent, status, remarks) {
   try {
-    await db.query(`
-      INSERT INTO login_history (user_id, email_attempted, ip_address, user_agent, status, remarks)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `, [userId, email, ip, userAgent, status, remarks]);
+    const { error } = await supabase.from('login_history').insert([{
+      user_id: userId,
+      email_attempted: email,
+      ip_address: ip,
+      user_agent: userAgent,
+      status: status,
+      remarks: remarks
+    }]);
+    if (error) throw error;
   } catch (err) {
     console.error('Failed to log login history:', err.message);
   }
@@ -37,19 +42,18 @@ const authController = {
 
     try {
       // Find user and join role name
-      const users = await db.query(`
-        SELECT u.*, r.name AS role_name 
-        FROM users u 
-        JOIN roles r ON u.role_id = r.id 
-        WHERE u.email = ?
-      `, [email]);
+      const { data: users, error: userError } = await supabase
+        .from('users')
+        .select('*, roles(name)')
+        .eq('email', email);
 
-      if (users.length === 0) {
+      if (userError || !users || users.length === 0) {
         await recordLoginHistory(null, email, ip, userAgent, 'Failed', 'User email not found');
         return res.status(401).json({ message: 'Invalid credentials.' });
       }
 
       const user = users[0];
+      const roleName = user.roles ? user.roles.name : '';
 
       if (user.status !== 'active') {
         await recordLoginHistory(user.id, email, ip, userAgent, 'Failed', 'Account deactivated');
@@ -64,9 +68,13 @@ const authController = {
       }
 
       // If user is employee, check onboarding status
-      if (user.role_name === 'Employee') {
-        const empCheck = await db.query('SELECT onboarding_status FROM employees WHERE user_id = ?', [user.id]);
-        if (empCheck.length > 0) {
+      if (roleName === 'Employee') {
+        const { data: empCheck, error: empError } = await supabase
+          .from('employees')
+          .select('onboarding_status')
+          .eq('user_id', user.id);
+          
+        if (!empError && empCheck && empCheck.length > 0) {
           const onboardingStatus = empCheck[0].onboarding_status;
           if (onboardingStatus !== 'Approved' && onboardingStatus !== 'Onboarding Completed') {
             await recordLoginHistory(user.id, email, ip, userAgent, 'Failed', `Blocked: Onboarding status is ${onboardingStatus}`);
@@ -79,7 +87,7 @@ const authController = {
 
       // Generate JWT
       const token = jwt.sign(
-        { id: user.id, email: user.email, role: user.role_name },
+        { id: user.id, email: user.email, role: roleName },
         JWT_SECRET,
         { expiresIn: JWT_EXPIRES_IN }
       );
@@ -88,7 +96,7 @@ const authController = {
       await recordLoginHistory(user.id, email, ip, userAgent, 'Success', 'Login completed');
       
       // Log audit trail
-      req.user = { id: user.id, email: user.email, roleName: user.role_name };
+      req.user = { id: user.id, email: user.email, roleName: roleName };
       await logAudit(req, 'LOGIN_SUCCESS', `users/${user.id}`);
 
       // Return token & profile structure
@@ -97,7 +105,7 @@ const authController = {
         user: {
           id: user.id,
           email: user.email,
-          role: user.role_name,
+          role: roleName,
           onboardingCompleted: user.onboarding_completed
         }
       });
@@ -126,9 +134,12 @@ const authController = {
     }
 
     try {
-      const users = await db.query('SELECT id, email, status FROM users WHERE email = ?', [email]);
-      if (users.length === 0) {
-        // Obfuscate response for security, but do not generate token
+      const { data: users, error: userError } = await supabase
+        .from('users')
+        .select('id, email, status')
+        .eq('email', email);
+        
+      if (userError || !users || users.length === 0) {
         return res.json({ message: 'If the email exists in our records, a secure password reset link will be sent.' });
       }
 
@@ -140,26 +151,23 @@ const authController = {
       // Generate secure reset token
       const rawToken = crypto.randomBytes(32).toString('hex');
       const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour validity (stored as IST timestamp implicitly based on session pool config)
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
 
       // Store hashed token in DB
-      await db.query(`
-        UPDATE users 
-        SET reset_token_hash = ?, reset_token_expires_at = ? 
-        WHERE id = ?
-      `, [tokenHash, expiresAt, user.id]);
+      await supabase
+        .from('users')
+        .update({ reset_token_hash: tokenHash, reset_token_expires_at: expiresAt })
+        .eq('id', user.id);
 
       // Log security event & audit log
       req.user = { id: user.id, email: user.email, roleName: 'Public' };
       await logAudit(req, 'PASSWORD_RESET_REQUESTED', `users/${user.id}`);
 
-      // In production, send this via email. For delivery, return it in the response (useful for API verification & testing)
       const resetLink = `http://localhost:5173/reset-password?token=${rawToken}`;
       console.log(`[PASSWORD_RESET] Link generated for ${email}: ${resetLink}`);
 
       res.json({
         message: 'If the email exists in our records, a secure password reset link will be sent.',
-        // Exposing token in development / test responses to simplify evaluation
         resetToken: rawToken,
         resetLink: resetLink
       });
@@ -177,23 +185,19 @@ const authController = {
     }
 
     try {
-      // Hash the incoming raw token to find it
       const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
-      // Check reset token in database
-      const users = await db.query(`
-        SELECT id, email, reset_token_expires_at 
-        FROM users 
-        WHERE reset_token_hash = ?
-      `, [tokenHash]);
+      const { data: users, error: userError } = await supabase
+        .from('users')
+        .select('id, email, reset_token_expires_at')
+        .eq('reset_token_hash', tokenHash);
 
-      if (users.length === 0) {
+      if (userError || !users || users.length === 0) {
         return res.status(400).json({ message: 'Invalid or expired password reset token.' });
       }
 
       const user = users[0];
       const now = new Date();
-      // Ensure the reset token is not expired
       const expiresAt = new Date(user.reset_token_expires_at);
 
       if (expiresAt < now) {
@@ -205,11 +209,10 @@ const authController = {
       const newHash = await bcrypt.hash(newPassword, salt);
 
       // Update password and clear token
-      await db.query(`
-        UPDATE users 
-        SET password_hash = ?, reset_token_hash = NULL, reset_token_expires_at = NULL 
-        WHERE id = ?
-      `, [newHash, user.id]);
+      await supabase
+        .from('users')
+        .update({ password_hash: newHash, reset_token_hash: null, reset_token_expires_at: null })
+        .eq('id', user.id);
 
       // Log audit
       req.user = { id: user.id, email: user.email, roleName: 'Public' };
@@ -230,7 +233,15 @@ const authController = {
     }
 
     try {
-      const users = await db.query('SELECT password_hash FROM users WHERE id = ?', [req.user.id]);
+      const { data: users, error: userError } = await supabase
+        .from('users')
+        .select('password_hash')
+        .eq('id', req.user.id);
+
+      if (userError || !users || users.length === 0) {
+        return res.status(404).json({ message: 'User not found.' });
+      }
+
       const user = users[0];
 
       const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
@@ -242,7 +253,10 @@ const authController = {
       const salt = await bcrypt.genSalt(10);
       const newHash = await bcrypt.hash(newPassword, salt);
 
-      await db.query('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, req.user.id]);
+      await supabase
+        .from('users')
+        .update({ password_hash: newHash })
+        .eq('id', req.user.id);
 
       await logAudit(req, 'PASSWORD_CHANGED_SUCCESS', `users/${req.user.id}`);
       res.json({ message: 'Password updated successfully.' });
@@ -255,28 +269,27 @@ const authController = {
   // Fetch current user details
   getMe: async (req, res) => {
     try {
-      const users = await db.query(`
-        SELECT u.id, u.email, u.onboarding_completed, r.name AS role_name
-        FROM users u
-        JOIN roles r ON u.role_id = r.id
-        WHERE u.id = ?
-      `, [req.user.id]);
+      const { data: users, error: userError } = await supabase
+        .from('users')
+        .select('id, email, onboarding_completed, roles(name)')
+        .eq('id', req.user.id);
 
-      if (users.length === 0) {
+      if (userError || !users || users.length === 0) {
         return res.status(404).json({ message: 'User not found.' });
       }
 
       const user = users[0];
+      const roleName = user.roles ? user.roles.name : '';
       let employeeProfile = null;
 
       // If it's an employee, attach profile
-      if (user.role_name === 'Employee') {
-        const empProfile = await db.query(`
-          SELECT id, employee_id, full_name, mobile, onboarding_status, photo_path 
-          FROM employees 
-          WHERE user_id = ?
-        `, [user.id]);
-        if (empProfile.length > 0) {
+      if (roleName === 'Employee') {
+        const { data: empProfile, error: empError } = await supabase
+          .from('employees')
+          .select('id, employee_id, full_name, mobile, onboarding_status, photo_path')
+          .eq('user_id', user.id);
+          
+        if (!empError && empProfile && empProfile.length > 0) {
           employeeProfile = empProfile[0];
         }
       }
@@ -285,7 +298,7 @@ const authController = {
         user: {
           id: user.id,
           email: user.email,
-          role: user.role_name,
+          role: roleName,
           onboardingCompleted: user.onboarding_completed
         },
         employee: employeeProfile

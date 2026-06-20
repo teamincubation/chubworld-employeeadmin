@@ -1,4 +1,4 @@
-const db = require('../config/db');
+const supabase = require('../config/db');
 const { logAudit } = require('../utils/auditLogger');
 const https = require('https');
 
@@ -35,7 +35,6 @@ const metadataController = {
 
     try {
       let data;
-      // Try native fetch first if available, else fallback to https module
       if (typeof fetch === 'function') {
         const response = await fetch(apiUrl);
         data = await response.json();
@@ -53,7 +52,6 @@ const metadataController = {
           postOffices: postOffices.map(po => po.Name)
         };
 
-        // Cache or save search log in audit
         await logAudit(req, 'PINCODE_RESOLVE', `pincode/${pincode}`, null, { state: details.state, district: details.district });
 
         return res.json(details);
@@ -69,8 +67,9 @@ const metadataController = {
   // 1. Departments CRUD
   listDepartments: async (req, res) => {
     try {
-      const list = await db.query('SELECT * FROM departments ORDER BY name ASC');
-      res.json(list);
+      const { data: list, error } = await supabase.from('departments').select('*').order('name', { ascending: true });
+      if (error) throw error;
+      res.json(list || []);
     } catch (err) {
       res.status(500).json({ message: 'Error retrieving departments.' });
     }
@@ -81,9 +80,11 @@ const metadataController = {
     if (!name) return res.status(400).json({ message: 'Department name is required.' });
 
     try {
-      const result = await db.query('INSERT INTO departments (name) VALUES (?)', [name]);
-      await logAudit(req, 'CREATE_DEPARTMENT', `departments/${result.insertId}`, null, { name });
-      res.status(201).json({ message: 'Department created.', id: result.insertId });
+      const { data: result, error } = await supabase.from('departments').insert([{ name }]).select('id').single();
+      if (error) throw error;
+
+      await logAudit(req, 'CREATE_DEPARTMENT', `departments/${result.id}`, null, { name });
+      res.status(201).json({ message: 'Department created.', id: result.id });
     } catch (err) {
       res.status(500).json({ message: 'Department already exists or server error.' });
     }
@@ -92,7 +93,9 @@ const metadataController = {
   deleteDepartment: async (req, res) => {
     const { id } = req.params;
     try {
-      await db.query('DELETE FROM departments WHERE id = ?', [id]);
+      const { error } = await supabase.from('departments').delete().eq('id', id);
+      if (error) throw error;
+
       await logAudit(req, 'DELETE_DEPARTMENT', `departments/${id}`);
       res.json({ message: 'Department deleted.' });
     } catch (err) {
@@ -103,8 +106,9 @@ const metadataController = {
   // 2. Designations CRUD
   listDesignations: async (req, res) => {
     try {
-      const list = await db.query('SELECT * FROM designations ORDER BY name ASC');
-      res.json(list);
+      const { data: list, error } = await supabase.from('designations').select('*').order('name', { ascending: true });
+      if (error) throw error;
+      res.json(list || []);
     } catch (err) {
       res.status(500).json({ message: 'Error retrieving designations.' });
     }
@@ -115,9 +119,11 @@ const metadataController = {
     if (!name) return res.status(400).json({ message: 'Designation name is required.' });
 
     try {
-      const result = await db.query('INSERT INTO designations (name) VALUES (?)', [name]);
-      await logAudit(req, 'CREATE_DESIGNATION', `designations/${result.insertId}`, null, { name });
-      res.status(201).json({ message: 'Designation created.', id: result.insertId });
+      const { data: result, error } = await supabase.from('designations').insert([{ name }]).select('id').single();
+      if (error) throw error;
+
+      await logAudit(req, 'CREATE_DESIGNATION', `designations/${result.id}`, null, { name });
+      res.status(201).json({ message: 'Designation created.', id: result.id });
     } catch (err) {
       res.status(500).json({ message: 'Designation already exists or server error.' });
     }
@@ -126,7 +132,9 @@ const metadataController = {
   deleteDesignation: async (req, res) => {
     const { id } = req.params;
     try {
-      await db.query('DELETE FROM designations WHERE id = ?', [id]);
+      const { error } = await supabase.from('designations').delete().eq('id', id);
+      if (error) throw error;
+
       await logAudit(req, 'DELETE_DESIGNATION', `designations/${id}`);
       res.json({ message: 'Designation deleted.' });
     } catch (err) {
@@ -137,8 +145,9 @@ const metadataController = {
   // 3. Work Locations CRUD
   listWorkLocations: async (req, res) => {
     try {
-      const list = await db.query('SELECT * FROM work_locations ORDER BY name ASC');
-      res.json(list);
+      const { data: list, error } = await supabase.from('work_locations').select('*').order('name', { ascending: true });
+      if (error) throw error;
+      res.json(list || []);
     } catch (err) {
       res.status(500).json({ message: 'Error retrieving locations.' });
     }
@@ -151,13 +160,14 @@ const metadataController = {
     }
 
     try {
-      const result = await db.query(`
-        INSERT INTO work_locations (name, latitude, longitude, radius_meters, allow_without_location)
-        VALUES (?, ?, ?, ?, ?)
-      `, [name, latitude, longitude, radiusMeters || 100, allowWithoutLocation ? 1 : 0]);
+      const { data: result, error } = await supabase.from('work_locations').insert([{
+        name, latitude, longitude, radius_meters: radiusMeters || 100, allow_without_location: allowWithoutLocation ? true : false
+      }]).select('id').single();
+      
+      if (error) throw error;
 
-      await logAudit(req, 'CREATE_WORK_LOCATION', `work_locations/${result.insertId}`, null, { name, latitude, longitude, radiusMeters });
-      res.status(201).json({ message: 'Work location configured.', id: result.insertId });
+      await logAudit(req, 'CREATE_WORK_LOCATION', `work_locations/${result.id}`, null, { name, latitude, longitude, radiusMeters });
+      res.status(201).json({ message: 'Work location configured.', id: result.id });
     } catch (err) {
       res.status(500).json({ message: 'Error setting up work location.' });
     }
@@ -168,12 +178,13 @@ const metadataController = {
     const { name, latitude, longitude, radiusMeters, allowWithoutLocation } = req.body;
 
     try {
-      const old = await db.query('SELECT * FROM work_locations WHERE id = ?', [id]);
-      await db.query(`
-        UPDATE work_locations SET
-          name = ?, latitude = ?, longitude = ?, radius_meters = ?, allow_without_location = ?
-        WHERE id = ?
-      `, [name, latitude, longitude, radiusMeters, allowWithoutLocation ? 1 : 0, id]);
+      const { data: old } = await supabase.from('work_locations').select('*').eq('id', id);
+      
+      const { error } = await supabase.from('work_locations').update({
+        name, latitude, longitude, radius_meters: radiusMeters, allow_without_location: allowWithoutLocation ? true : false
+      }).eq('id', id);
+
+      if (error) throw error;
 
       await logAudit(req, 'UPDATE_WORK_LOCATION', `work_locations/${id}`, old[0], { name, latitude, longitude, radiusMeters });
       res.json({ message: 'Work location details updated.' });
@@ -185,7 +196,9 @@ const metadataController = {
   deleteWorkLocation: async (req, res) => {
     const { id } = req.params;
     try {
-      await db.query('DELETE FROM work_locations WHERE id = ?', [id]);
+      const { error } = await supabase.from('work_locations').delete().eq('id', id);
+      if (error) throw error;
+
       await logAudit(req, 'DELETE_WORK_LOCATION', `work_locations/${id}`);
       res.json({ message: 'Work location deleted.' });
     } catch (err) {
@@ -196,8 +209,9 @@ const metadataController = {
   // 4. Shifts CRUD
   listShifts: async (req, res) => {
     try {
-      const list = await db.query('SELECT * FROM shifts ORDER BY name ASC');
-      res.json(list);
+      const { data: list, error } = await supabase.from('shifts').select('*').order('name', { ascending: true });
+      if (error) throw error;
+      res.json(list || []);
     } catch (err) {
       res.status(500).json({ message: 'Error retrieving shifts.' });
     }
@@ -210,13 +224,14 @@ const metadataController = {
     }
 
     try {
-      const result = await db.query(`
-        INSERT INTO shifts (name, start_time, end_time, grace_period_minutes)
-        VALUES (?, ?, ?, ?)
-      `, [name, startTime, endTime, gracePeriodMinutes || 15]);
+      const { data: result, error } = await supabase.from('shifts').insert([{
+        name, start_time: startTime, end_time: endTime, grace_period_minutes: gracePeriodMinutes || 15
+      }]).select('id').single();
 
-      await logAudit(req, 'CREATE_SHIFT', `shifts/${result.insertId}`, null, { name, startTime, endTime });
-      res.status(201).json({ message: 'Shift created successfully.', id: result.insertId });
+      if (error) throw error;
+
+      await logAudit(req, 'CREATE_SHIFT', `shifts/${result.id}`, null, { name, startTime, endTime });
+      res.status(201).json({ message: 'Shift created successfully.', id: result.id });
     } catch (err) {
       res.status(500).json({ message: 'Shift already exists or configuration error.' });
     }
@@ -225,7 +240,9 @@ const metadataController = {
   deleteShift: async (req, res) => {
     const { id } = req.params;
     try {
-      await db.query('DELETE FROM shifts WHERE id = ?', [id]);
+      const { error } = await supabase.from('shifts').delete().eq('id', id);
+      if (error) throw error;
+
       await logAudit(req, 'DELETE_SHIFT', `shifts/${id}`);
       res.json({ message: 'Shift configuration deleted.' });
     } catch (err) {
@@ -241,25 +258,19 @@ const metadataController = {
     }
 
     try {
-      // Deactivate any currently active shift by setting end_date = day before new shift
       const prevDate = new Date(startDate);
       prevDate.setDate(prevDate.getDate() - 1);
       const prevDateStr = prevDate.toISOString().split('T')[0];
 
-      await db.query(`
-        UPDATE employee_shift_assignments 
-        SET end_date = ? 
-        WHERE employee_id = ? AND end_date IS NULL
-      `, [prevDateStr, employeeId]);
+      await supabase.from('employee_shift_assignments').update({ end_date: prevDateStr }).eq('employee_id', employeeId).is('end_date', null);
 
-      // Assign new shift
-      await db.query(`
-        INSERT INTO employee_shift_assignments (employee_id, shift_id, start_date, end_date)
-        VALUES (?, ?, ?, ?)
-      `, [employeeId, shiftId, startDate, endDate || null]);
+      const { error } = await supabase.from('employee_shift_assignments').insert([{
+        employee_id: employeeId, shift_id: shiftId, start_date: startDate, end_date: endDate || null
+      }]);
+
+      if (error) throw error;
 
       await logAudit(req, 'ASSIGN_SHIFT', `employees/${employeeId}/shift`, null, { shiftId, startDate });
-
       res.json({ message: 'Employee shift assignment completed.' });
     } catch (err) {
       console.error('AssignShift Error:', err.message);

@@ -1,4 +1,4 @@
-const db = require('../config/db');
+const supabase = require('../config/db');
 
 /**
  * Redact sensitive fields from objects before writing to logs
@@ -46,23 +46,17 @@ async function logAudit(req, actionType, targetRecord = null, oldValue = null, n
       role = req.user.roleName || 'User';
     }
 
-    const query = `
-      INSERT INTO audit_logs 
-      (user_id, action_type, performed_by, role, target_record, old_value, new_value, ip_address, user_agent) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    await db.query(query, [
-      userId,
-      actionType,
-      performedBy,
-      role,
-      targetRecord,
-      redactSensitiveData(oldValue),
-      redactSensitiveData(newValue),
-      ipAddress,
-      userAgent
-    ]);
+    await supabase.from('audit_logs').insert([{
+      user_id: userId,
+      action_type: actionType,
+      performed_by: performedBy,
+      role: role,
+      target_record: targetRecord,
+      old_value: redactSensitiveData(oldValue),
+      new_value: redactSensitiveData(newValue),
+      ip_address: ipAddress,
+      user_agent: userAgent
+    }]);
   } catch (err) {
     console.error('Audit logging failed:', err.message);
   }
