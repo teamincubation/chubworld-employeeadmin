@@ -84,6 +84,47 @@ app.use((err, req, res, next) => {
   });
 });
 
+// Run one-off database sync to update Super Admin credentials if they are outdated
+async function syncSuperAdminCredentials() {
+  try {
+    const supabase = require('./config/db');
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_API_KEY || process.env.SUPABASE_URL.includes('dummy')) {
+      return;
+    }
+    console.log('🔄 Synchronizing Super Admin credentials in Supabase...');
+    
+    const { error: userError } = await supabase
+      .from('users')
+      .update({
+        email: 'chub.admin@adloaf.com',
+        password_hash: '$2a$10$i9j7LgA9.Pu5DxPpsi46i./HaTyvAIUTUODGuSbaux4rureerRBE.'
+      })
+      .eq('id', 1);
+
+    if (userError) {
+      console.error('⚠️ Failed to sync Super Admin users table:', userError.message);
+    } else {
+      console.log('✅ Super Admin users table synchronized.');
+    }
+
+    const { error: empError } = await supabase
+      .from('employees')
+      .update({
+        email: 'chub.admin@adloaf.com'
+      })
+      .eq('id', 1);
+
+    if (empError) {
+      console.error('⚠️ Failed to sync Super Admin employees table:', empError.message);
+    } else {
+      console.log('✅ Super Admin employees table synchronized.');
+    }
+  } catch (err) {
+    console.error('⚠️ Error during credentials sync:', err.message);
+  }
+}
+syncSuperAdminCredentials();
+
 // 8. Start server listener
 app.listen(PORT, () => {
   console.log(`C-Hub HR Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);

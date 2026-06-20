@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 const supabase = require('../config/db');
 const { logAudit } = require('../utils/auditLogger');
 
@@ -166,10 +167,60 @@ const authController = {
       const resetLink = `http://localhost:5173/reset-password?token=${rawToken}`;
       console.log(`[PASSWORD_RESET] Link generated for ${email}: ${resetLink}`);
 
+      // Automated email sending
+      const fromEmail = email === 'chub.admin@adloaf.com' ? 'developers@adloaf.com' : (process.env.SMTP_USER || 'no-reply@chubworld.com');
+      let mailSent = false;
+      let mailError = null;
+
+      if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+        try {
+          const transporter = nodemailer.createTransport({
+            host: process.env.SMTP_HOST,
+            port: parseInt(process.env.SMTP_PORT || '587'),
+            secure: process.env.SMTP_PORT === '465',
+            auth: {
+              user: process.env.SMTP_USER,
+              pass: process.env.SMTP_PASS
+            }
+          });
+
+          const mailOptions = {
+            from: `"C-Hub Operations" <${fromEmail}>`,
+            to: email,
+            subject: 'C-Hub Secure Password Reset Request',
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+                <h2 style="color: #6a1b9a; text-align: center;">Secure Password Reset</h2>
+                <p>Hello,</p>
+                <p>We received a request to reset your password for your C-Hub HR system account.</p>
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="${resetLink}" style="background-color: #e91e63; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Reset Password</a>
+                </div>
+                <p>If you did not request this, please ignore this email or contact security administrators immediately.</p>
+                <p>This password reset link is valid for 1 hour.</p>
+                <hr style="border: 0; border-top: 1px solid #e0e0e0; margin: 20px 0;" />
+                <p style="font-size: 12px; color: #9e9e9e; text-align: center;">C-Hub HR Systems & Operations</p>
+              </div>
+            `
+          };
+
+          await transporter.sendMail(mailOptions);
+          mailSent = true;
+          console.log(`[SMTP] Reset email successfully sent to ${email} from ${fromEmail}`);
+        } catch (err) {
+          console.error('SMTP Email sending failed:', err.message);
+          mailError = err.message;
+        }
+      } else {
+        console.log(`[SMTP_SKIPPED] SMTP is not configured. Reset link for ${email}: ${resetLink}`);
+      }
+
       res.json({
         message: 'If the email exists in our records, a secure password reset link will be sent.',
         resetToken: rawToken,
-        resetLink: resetLink
+        resetLink: resetLink,
+        mailSent,
+        mailError
       });
     } catch (err) {
       console.error('ForgotPassword error:', err.message);

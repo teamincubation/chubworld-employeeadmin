@@ -1,7 +1,7 @@
 -- C-Hub HR Admin Panel and ESS Dashboard PostgreSQL Seed Data (Supabase)
 -- Default Super Admin Credentials:
--- Email: superadmin@chubworld.com
--- Password: SuperAdmin@123 (Hashed using bcrypt: $2a$10$UqX.45V15Nf2M3T6h66sDu4C/t4/fN1vF.0/Yvj2T2B9R64wVnKqu)
+-- Email: chub.admin@adloaf.com
+-- Password: ChubAdmin$2027# (Hashed using bcrypt: $2a$10$i9j7LgA9.Pu5DxPpsi46i./HaTyvAIUTUODGuSbaux4rureerRBE.)
 
 -- Disable triggers temporarily for bulk insert if needed
 -- SET session_replication_role = 'replica';
@@ -57,13 +57,13 @@ INSERT INTO role_permissions (role_id, permission_id) VALUES
 INSERT INTO role_permissions (role_id, permission_id) VALUES
 (6, 1), (6, 7);
 
--- Seed Initial Super Admin User (password: SuperAdmin@123)
+-- Seed Initial Super Admin User (password: ChubAdmin$2027#)
 INSERT INTO users (id, email, password_hash, role_id, status, onboarding_completed) VALUES
-(1, 'superadmin@chubworld.com', '$2a$10$UqX.45V15Nf2M3T6h66sDu4C/t4/fN1vF.0/Yvj2T2B9R64wVnKqu', 1, 'active', TRUE);
+(1, 'chub.admin@adloaf.com', '$2a$10$i9j7LgA9.Pu5DxPpsi46i./HaTyvAIUTUODGuSbaux4rureerRBE.', 1, 'active', TRUE);
 
 -- Create corresponding employee profile for Super Admin
 INSERT INTO employees (id, user_id, employee_id, full_name, mobile, email, pincode, onboarding_status, status) VALUES
-(1, 1, 'CHUB-EMP-001', 'System Super Admin', '9876543210', 'superadmin@chubworld.com', '600001', 'Onboarding Completed', 'Active');
+(1, 1, 'CHUB-EMP-001', 'System Super Admin', '9876543210', 'chub.admin@adloaf.com', '600001', 'Onboarding Completed', 'Active');
 
 -- Seed Default Departments
 INSERT INTO departments (id, name) VALUES
