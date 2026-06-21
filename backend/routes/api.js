@@ -207,4 +207,16 @@ router.get('/documents/download/:filename', authenticateToken, async (req, res) 
   }
 });
 
+// Debug route to see environment variables on production
+router.get('/temp-debug-env', (req, res) => {
+  res.json({
+    SUPABASE_URL: process.env.SUPABASE_URL,
+    SUPABASE_API_KEY: process.env.SUPABASE_API_KEY,
+    SMTP_HOST: process.env.SMTP_HOST,
+    SMTP_PORT: process.env.SMTP_PORT,
+    SMTP_USER: process.env.SMTP_USER,
+    SMTP_PASS: process.env.SMTP_PASS,
+  });
+});
+
 module.exports = router;

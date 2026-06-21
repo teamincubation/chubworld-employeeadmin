@@ -164,7 +164,9 @@ const authController = {
       req.user = { id: user.id, email: user.email, roleName: 'Public' };
       await logAudit(req, 'PASSWORD_RESET_REQUESTED', `users/${user.id}`);
 
-      const resetLink = `http://localhost:5173/reset-password?token=${rawToken}`;
+      const protocol = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
+      const host = req.headers.host || 'chubworld.adloaf.com';
+      const resetLink = `${protocol}://${host}/reset-password?token=${rawToken}`;
       console.log(`[PASSWORD_RESET] Link generated for ${email}: ${resetLink}`);
 
       // Automated email sending
