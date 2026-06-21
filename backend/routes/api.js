@@ -218,27 +218,33 @@ router.get('/temp-run-migrations', async (req, res) => {
   let connected = false;
   let lastError;
 
+  // Retry logic: try to connect up to 5 times per port
   for (const port of ports) {
-    console.log(`Trying to connect to pooler on port ${port}...`);
-    client = new Client({
-      host: 'aws-0-ap-southeast-1.pooler.supabase.com',
-      port: port,
-      database: 'postgres',
-      user: 'postgres.mcolsszozjnveoommnuk',
-      password: 'Cw@adloaf#root$Admin',
-      ssl: { rejectUnauthorized: false }
-    });
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      console.log(`Port ${port}, Attempt ${attempt}: Connecting to pooler...`);
+      client = new Client({
+        host: 'aws-0-ap-southeast-1.pooler.supabase.com',
+        port: port,
+        database: 'postgres',
+        user: 'postgres.mcolsszozjnveoommnuk',
+        password: 'Cw@adloaf#root$Admin',
+        ssl: { rejectUnauthorized: false }
+      });
 
-    try {
-      await client.connect();
-      connected = true;
-      console.log(`Connected successfully on port ${port}!`);
-      break;
-    } catch (err) {
-      console.error(`Connection failed on port ${port}:`, err.message);
-      lastError = err;
-      try { await client.end(); } catch (e) {}
+      try {
+        await client.connect();
+        connected = true;
+        console.log(`Port ${port}, Attempt ${attempt}: Connected successfully!`);
+        break;
+      } catch (err) {
+        console.error(`Port ${port}, Attempt ${attempt} failed:`, err.message);
+        lastError = err;
+        try { await client.end(); } catch (e) {}
+        // Sleep 2 seconds before retrying
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
     }
+    if (connected) break;
   }
 
   if (!connected) {
