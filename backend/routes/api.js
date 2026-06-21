@@ -207,30 +207,34 @@ router.get('/documents/download/:filename', authenticateToken, async (req, res) 
   }
 });
 
-// Debug route to initialize Supabase database tables and seed data via direct or pooler with comprehensive retries
+// Debug route to initialize Supabase database tables and seed data via discovered pooler host
 router.get('/temp-run-migrations', async (req, res) => {
   const { Client } = require('pg');
   const fs = require('fs');
   const path = require('path');
 
-  const targets = [
-    { host: 'db.mcolsszojnveoommnuk.supabase.co', port: 5432, user: 'postgres' },
-    { host: 'aws-0-ap-southeast-1.pooler.supabase.com', port: 6543, user: 'postgres.mcolsszojnveoommnuk' }
+  const poolerHosts = [
+    'aws-0-ap-southeast-1.pooler.supabase.com',
+    'aws-1-ap-southeast-1.pooler.supabase.com',
+    'aws-2-ap-southeast-1.pooler.supabase.com',
+    'aws-3-ap-southeast-1.pooler.supabase.com',
+    'aws-0.pooler.supabase.com'
   ];
 
+  const ports = [6543, 5432];
   let client;
   let connected = false;
   let lastError;
 
-  // Try each target up to 8 times with a 3-second delay
-  for (const target of targets) {
-    for (let attempt = 1; attempt <= 8; attempt++) {
-      console.log(`Connecting to ${target.host}:${target.port} as ${target.user} (Attempt ${attempt})...`);
+  // Search for the active and correct pooler host/port combination
+  for (const host of poolerHosts) {
+    for (const port of ports) {
+      console.log(`Trying host: ${host}, port: ${port}...`);
       client = new Client({
-        host: target.host,
-        port: target.port,
+        host: host,
+        port: port,
         database: 'postgres',
-        user: target.user,
+        user: 'postgres.mcolsszozjnveoommnuk',
         password: 'Cw@adloaf#root$Admin',
         ssl: { rejectUnauthorized: false }
       });
@@ -238,13 +242,12 @@ router.get('/temp-run-migrations', async (req, res) => {
       try {
         await client.connect();
         connected = true;
-        console.log(`Successfully connected to ${target.host}!`);
+        console.log(`🎉 SUCCESS! Connected to ${host}:${port}`);
         break;
       } catch (err) {
-        console.error(`Connection to ${target.host} failed:`, err.message);
+        console.error(`Failed ${host}:${port} - ${err.message}`);
         lastError = err;
         try { await client.end(); } catch (e) {}
-        await new Promise(resolve => setTimeout(resolve, 3000));
       }
     }
     if (connected) break;
