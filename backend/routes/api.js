@@ -207,36 +207,47 @@ router.get('/documents/download/:filename', authenticateToken, async (req, res) 
   }
 });
 
-// Debug route to test connection with clipboard password candidate
-router.get('/temp-db-test-clipboard', async (req, res) => {
+// Debug route to initialize Supabase database tables and seed data
+router.get('/temp-run-migrations', async (req, res) => {
   const { Client } = require('pg');
-  const passwords = [
-    'Cw@adloaf#root$Admin',
-    'ChubAdmin$2027#',
-    'SuperAdmin@123'
-  ];
+  const fs = require('fs');
+  const path = require('path');
 
-  const results = [];
-  for (const password of passwords) {
-    const client = new Client({
-      host: 'db.mcolsszozjnveoommnuk.supabase.co',
-      port: 5432,
-      database: 'postgres',
-      user: 'postgres',
-      password: password,
-      ssl: { rejectUnauthorized: false }
-    });
+  const client = new Client({
+    host: 'db.mcolsszozjnveoommnuk.supabase.co',
+    port: 5432,
+    database: 'postgres',
+    user: 'postgres',
+    password: 'Cw@adloaf#root$Admin',
+    ssl: { rejectUnauthorized: false }
+  });
 
-    try {
-      await client.connect();
-      results.push({ password, status: 'SUCCESS' });
-      await client.end();
-    } catch (err) {
-      results.push({ password, status: 'FAILED', error: err.message });
+  try {
+    const schemaPath = path.join(__dirname, '../../database/schema.sql');
+    const seedPath = path.join(__dirname, '../../database/seed.sql');
+
+    console.log('Reading migration files...');
+    const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+    const seedSql = fs.readFileSync(seedPath, 'utf8');
+
+    console.log('Connecting to PostgreSQL database...');
+    await client.connect();
+
+    console.log('Executing schema.sql...');
+    await client.query(schemaSql);
+
+    console.log('Executing seed.sql...');
+    await client.query(seedSql);
+
+    await client.end();
+    res.json({ status: 'SUCCESS', message: 'Database schema and seed data applied successfully!' });
+  } catch (err) {
+    if (client) {
+      try { await client.end(); } catch (e) {}
     }
+    console.error('Migration failed:', err.message);
+    res.status(500).json({ status: 'FAILED', error: err.message, stack: err.stack });
   }
-
-  res.json({ results });
 });
 
 module.exports = router;
