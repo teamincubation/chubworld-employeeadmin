@@ -207,40 +207,47 @@ router.get('/documents/download/:filename', authenticateToken, async (req, res) 
   }
 });
 
-// Debug route to initialize Supabase database tables and seed data via direct connection with retries
+// Debug route to initialize Supabase database tables and seed data via direct or pooler with comprehensive retries
 router.get('/temp-run-migrations', async (req, res) => {
   const { Client } = require('pg');
   const fs = require('fs');
   const path = require('path');
 
+  const targets = [
+    { host: 'db.mcolsszozjnveoommnuk.supabase.co', port: 5432, user: 'postgres' },
+    { host: 'aws-0-ap-southeast-1.pooler.supabase.com', port: 6543, user: 'postgres.mcolsszozjnveoommnuk' }
+  ];
+
   let client;
   let connected = false;
   let lastError;
 
-  // Retry logic: try to connect up to 5 times with a 5-second delay to bypass rate limits
-  for (let attempt = 1; attempt <= 5; attempt++) {
-    console.log(`Attempt ${attempt}: Connecting to direct host db.mcolsszozjnveoommnuk.supabase.co...`);
-    client = new Client({
-      host: 'db.mcolsszozjnveoommnuk.supabase.co',
-      port: 5432,
-      database: 'postgres',
-      user: 'postgres',
-      password: 'Cw@adloaf#root$Admin',
-      ssl: { rejectUnauthorized: false }
-    });
+  // Try each target up to 8 times with a 3-second delay
+  for (const target of targets) {
+    for (let attempt = 1; attempt <= 8; attempt++) {
+      console.log(`Connecting to ${target.host}:${target.port} as ${target.user} (Attempt ${attempt})...`);
+      client = new Client({
+        host: target.host,
+        port: target.port,
+        database: 'postgres',
+        user: target.user,
+        password: 'Cw@adloaf#root$Admin',
+        ssl: { rejectUnauthorized: false }
+      });
 
-    try {
-      await client.connect();
-      connected = true;
-      console.log(`Attempt ${attempt}: Connected successfully!`);
-      break;
-    } catch (err) {
-      console.error(`Attempt ${attempt} failed:`, err.message);
-      lastError = err;
-      try { await client.end(); } catch (e) {}
-      // Sleep 5 seconds before retrying
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      try {
+        await client.connect();
+        connected = true;
+        console.log(`Successfully connected to ${target.host}!`);
+        break;
+      } catch (err) {
+        console.error(`Connection to ${target.host} failed:`, err.message);
+        lastError = err;
+        try { await client.end(); } catch (e) {}
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
     }
+    if (connected) break;
   }
 
   if (!connected) {
