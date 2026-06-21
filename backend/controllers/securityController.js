@@ -82,8 +82,18 @@ const securityController = {
 
       if (error) throw error;
 
-      const mappedUsers = (users || []).map(u => {
+      const { data: controllerAcc } = await supabase.from('admin_controller_access').select('user_id, full_name').limit(1);
+      const controllerMap = {};
+      if (controllerAcc && controllerAcc.length > 0 && controllerAcc[0].user_id) {
+        controllerMap[controllerAcc[0].user_id] = controllerAcc[0].full_name;
+      }
+
+      let mappedUsers = (users || []).map(u => {
         const emp = (u.employees && u.employees.length > 0) ? u.employees[0] : null;
+        let fullName = emp ? emp.full_name : null;
+        if (u.roles && u.roles.name === 'Admin Controller' && controllerMap[u.id]) {
+          fullName = controllerMap[u.id];
+        }
         return {
           id: u.id,
           email: u.email,
@@ -91,11 +101,15 @@ const securityController = {
           onboarding_completed: u.onboarding_completed,
           role_name: u.roles ? u.roles.name : null,
           employee_id: emp ? emp.employee_id : null,
-          full_name: emp ? emp.full_name : null,
+          full_name: fullName,
           deleted_at: emp ? emp.deleted_at : null,
           is_soft_deleted: !!(emp && emp.deleted_at)
         };
-      }).filter(u => u.email !== 'chub.admin@adloaf.com' && u.role_name !== 'Super Admin');
+      });
+
+      if (req.user.roleName !== 'Super Admin') {
+        mappedUsers = mappedUsers.filter(u => u.email !== 'chub.admin@adloaf.com' && u.role_name !== 'Super Admin');
+      }
 
       res.json(mappedUsers);
     } catch (err) {
@@ -103,6 +117,7 @@ const securityController = {
       res.status(500).json({ message: 'Error loading user logins list.' });
     }
   },
+
 
   // Activate / Deactivate login accounts
   toggleUserStatus: async (req, res) => {
@@ -176,6 +191,11 @@ const securityController = {
       return res.status(403).json({ message: 'Access denied: Sub-admins are not authorized to delete system data.' });
     }
 
+    // Block self-deletion for anyone except Super Admin
+    if (parseInt(userId, 10) === parseInt(req.user.id, 10) && req.user.roleName !== 'Super Admin') {
+      return res.status(403).json({ message: 'Access denied: You cannot delete your own account.' });
+    }
+
     try {
       // Get target user details to check their role/email
       const { data: targetUser, error: checkErr } = await supabase
@@ -195,6 +215,7 @@ const securityController = {
       }
 
       const userRecord = targetUser;
+
 
 
 
@@ -462,6 +483,196 @@ const securityController = {
     } catch (err) {
       console.error('updateSubAdminLicensing error:', err.message);
       res.status(500).json({ message: 'Error saving sub-admin access mapping.' });
+    }
+  },
+
+  getAdminController: async (req, res) => {
+    try {
+      const { data: access, error } = await supabase
+        .from('admin_controller_access')
+        .select('*')
+        .limit(1);
+
+      if (error) throw error;
+
+      if (!access || access.length === 0) {
+        return res.json(null);
+      }
+
+      const rec = access[0];
+
+      // Calculate accumulated duration
+      let accumulatedSeconds = rec.total_active_seconds || 0;
+      if (rec.status === 'Active' && rec.activated_at) {
+        const elapsed = Math.floor((Date.now() - new Date(rec.activated_at).getTime()) / 1000);
+        if (elapsed > 0) accumulatedSeconds += elapsed;
+      }
+
+      res.json({
+        id: rec.id,
+        user_id: rec.user_id,
+        status: rec.status,
+        password_plain: rec.password_plain,
+        activated_at: rec.activated_at,
+        total_active_seconds: rec.total_active_seconds,
+        accumulated_seconds: accumulatedSeconds,
+        employee_id: null,
+        full_name: rec.full_name,
+        email: rec.email
+      });
+    } catch (err) {
+      console.error('getAdminController error:', err.message);
+      res.status(500).json({ message: 'Error loading Admin Controller configurations.' });
+    }
+  },
+
+  setAdminController: async (req, res) => {
+    if (req.user.roleName !== 'Super Admin') {
+      return res.status(403).json({ message: 'Access denied: Super Admin privilege required.' });
+    }
+    const { name, email, password, status } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: 'Name, email, and password are required.' });
+    }
+
+    try {
+      const bcrypt = require('bcryptjs');
+      const salt = await bcrypt.genSalt(10);
+      const hash = await bcrypt.hash(password, salt);
+
+      // Check if Admin Controller access record exists
+      const { data: currentAccess } = await supabase.from('admin_controller_access').select('id, user_id').limit(1);
+      
+      let userId;
+
+      if (currentAccess && currentAccess.length > 0) {
+        const rec = currentAccess[0];
+        userId = rec.user_id;
+
+        if (userId) {
+          // Update the user record (email & password_hash)
+          await supabase
+            .from('users')
+            .update({
+              email: email,
+              password_hash: hash,
+              status: 'active'
+            })
+            .eq('id', userId);
+        } else {
+          // If for some reason user_id was null, create it now
+          const { data: newUser, error: userErr } = await supabase
+            .from('users')
+            .insert([{
+              email: email,
+              password_hash: hash,
+              role_id: 7, // Admin Controller role
+              status: 'active',
+              onboarding_completed: true
+            }])
+            .select('id')
+            .single();
+
+          if (userErr) throw userErr;
+          userId = newUser.id;
+        }
+
+        const accessPayload = {
+          user_id: userId,
+          full_name: name,
+          email: email,
+          password_plain: password,
+          status: status || 'Active'
+        };
+
+        await supabase.from('admin_controller_access').update(accessPayload).eq('id', rec.id);
+      } else {
+        // Create user record
+        const { data: newUser, error: userErr } = await supabase
+          .from('users')
+          .insert([{
+            email: email,
+            password_hash: hash,
+            role_id: 7, // Admin Controller role
+            status: 'active',
+            onboarding_completed: true
+          }])
+          .select('id')
+          .single();
+
+        if (userErr) throw userErr;
+        userId = newUser.id;
+
+        const accessPayload = {
+          user_id: userId,
+          full_name: name,
+          email: email,
+          password_plain: password,
+          status: status || 'Active',
+          activated_at: (status || 'Active') === 'Active' ? new Date().toISOString() : null,
+          total_active_seconds: 0
+        };
+
+        await supabase.from('admin_controller_access').insert([accessPayload]);
+      }
+
+      await logAudit(req, 'SET_ADMIN_CONTROLLER', `users/${userId}`, null, { email });
+
+      res.json({ message: 'Admin Controller assigned and configured successfully.' });
+    } catch (err) {
+      console.error('setAdminController error:', err.message);
+      res.status(500).json({ message: 'Error setting Admin Controller access.' });
+    }
+  },
+
+  updateAdminControllerStatus: async (req, res) => {
+    if (req.user.roleName !== 'Super Admin') {
+      return res.status(403).json({ message: 'Access denied: Super Admin privilege required.' });
+    }
+    const { status } = req.body;
+    if (!['Active', 'Paused', 'Deactivated', 'Revoked'].includes(status)) {
+      return res.status(400).json({ message: 'Invalid status parameter.' });
+    }
+
+    try {
+      const { data: access, error: accErr } = await supabase.from('admin_controller_access').select('*').limit(1);
+      if (accErr || !access || access.length === 0) {
+        return res.status(404).json({ message: 'No Admin Controller assigned.' });
+      }
+
+      const rec = access[0];
+      const oldStatus = rec.status;
+      
+      let newTotalSeconds = rec.total_active_seconds || 0;
+      let newActivatedAt = rec.activated_at;
+
+      // Handle transitions
+      if (oldStatus === 'Active' && status !== 'Active') {
+        // Transitioning OUT of Active: calculate and add elapsed time
+        if (rec.activated_at) {
+          const elapsed = Math.floor((Date.now() - new Date(rec.activated_at).getTime()) / 1000);
+          if (elapsed > 0) {
+            newTotalSeconds += elapsed;
+          }
+        }
+        newActivatedAt = null;
+      } else if (oldStatus !== 'Active' && status === 'Active') {
+        // Transitioning INTO Active: set start time
+        newActivatedAt = new Date().toISOString();
+      }
+
+      await supabase.from('admin_controller_access').update({
+        status: status,
+        activated_at: newActivatedAt,
+        total_active_seconds: newTotalSeconds
+      }).eq('id', rec.id);
+
+      await logAudit(req, `ADMIN_CONTROLLER_STATUS_${status.toUpperCase()}`, `admin_controller/${rec.id}`, { oldStatus }, { status });
+
+      res.json({ message: `Admin Controller access status is now ${status}.` });
+    } catch (err) {
+      console.error('updateAdminControllerStatus error:', err.message);
+      res.status(500).json({ message: 'Error updating Admin Controller status.' });
     }
   }
 };

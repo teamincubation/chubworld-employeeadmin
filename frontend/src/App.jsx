@@ -26,6 +26,7 @@ import ESSClockIn from './pages/ESSClockIn';
 import ESSLeaveRequest from './pages/ESSLeaveRequest';
 import ESSPerformance from './pages/ESSPerformance';
 import ESSProfile from './pages/ESSProfile';
+import ESSLayoutShell from './components/ESSLayoutShell';
 
 function LayoutShell({ children }) {
   return (
@@ -99,7 +100,7 @@ function MainAppRouter() {
   } else {
     // Employee ESS Routes
     return (
-      <LayoutShell>
+      <ESSLayoutShell>
         <Routes>
           <Route path="/" element={<ESSDashboard />} />
           <Route path="/ess/clock" element={<ESSClockIn />} />
@@ -109,7 +110,7 @@ function MainAppRouter() {
           <Route path="/ess/password" element={<ESSProfile />} /> {/* Password reset sits inside profile page */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-      </LayoutShell>
+      </ESSLayoutShell>
     );
   }
 }

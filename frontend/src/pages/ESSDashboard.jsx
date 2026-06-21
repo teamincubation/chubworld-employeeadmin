@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
-import { Clock, Calendar, ShieldCheck, UserCheck, Milestone, User } from 'lucide-react';
+import { Clock, Calendar, ShieldCheck, UserCheck, Milestone, User, Download, Smartphone } from 'lucide-react';
 
 export default function ESSDashboard() {
   const { request } = useAuth();
@@ -12,8 +12,41 @@ export default function ESSDashboard() {
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // PWA & Android Installation Banner State
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+
   useEffect(() => {
     fetchDashboardData();
+
+    // Check if user is on Android device
+    const ua = navigator.userAgent || navigator.vendor || window.opera;
+    const isAndroidDevice = /android/i.test(ua);
+    const dismissed = localStorage.getItem('chub_ess_pwa_dismissed');
+
+    const handleBeforeInstallPrompt = (e) => {
+      // Prevent the mini-infobar from appearing on mobile
+      e.preventDefault();
+      // Stash the event so it can be triggered later.
+      setDeferredPrompt(e);
+      // Show the install banner if not dismissed and user is on Android or for debugging/desktop testing
+      if (!dismissed) {
+        setShowInstallBanner(true);
+      }
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    // Fallback: If it is an Android device and not already in standalone mode,
+    // we want to recommend downloading/installing the app even if the beforeinstallprompt hasn't fired yet
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    if (isAndroidDevice && !isStandalone && !dismissed) {
+      setShowInstallBanner(true);
+    }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
   }, []);
 
   const fetchDashboardData = async () => {
@@ -36,6 +69,23 @@ export default function ESSDashboard() {
     }
   };
 
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) {
+      alert("To install: Tap the three dots (menu icon) in your browser and select 'Add to Home screen' or 'Install app'.");
+      return;
+    }
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`PWA install prompt outcome: ${outcome}`);
+    setDeferredPrompt(null);
+    setShowInstallBanner(false);
+  };
+
+  const handleDismissBanner = () => {
+    localStorage.setItem('chub_ess_pwa_dismissed', 'true');
+    setShowInstallBanner(false);
+  };
+
   if (loading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '85vh' }}>
@@ -50,6 +100,123 @@ export default function ESSDashboard() {
 
   return (
     <div>
+      {/* Android/Mobile PWA Recommendation Banner */}
+      {showInstallBanner && (
+        <div className="card m-b-20" style={{
+          background: 'linear-gradient(135deg, #1e1b4b 0%, #311042 100%)',
+          color: '#FFFFFF',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          borderRadius: '16px',
+          padding: '24px',
+          position: 'relative',
+          overflow: 'hidden',
+          boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)'
+        }}>
+          {/* Background ambient light */}
+          <div style={{
+            position: 'absolute',
+            top: '-50px',
+            right: '-50px',
+            width: '150px',
+            height: '150px',
+            background: 'rgba(168, 85, 247, 0.3)',
+            filter: 'blur(40px)',
+            borderRadius: '50%',
+            pointerEvents: 'none'
+          }} />
+
+          <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+            <div style={{
+              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+              borderRadius: '12px',
+              padding: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#4ADE80' // Android green
+            }}>
+              <Smartphone size={32} />
+            </div>
+            <div style={{ flex: 1, paddingRight: '20px' }}>
+              <span style={{
+                fontSize: '11px',
+                textTransform: 'uppercase',
+                fontWeight: 700,
+                letterSpacing: '1px',
+                color: '#4ADE80',
+                display: 'block',
+                marginBottom: '4px'
+              }}>
+                Android PWA App Available
+              </span>
+              <h3 style={{ fontSize: '18px', color: '#FFFFFF', fontWeight: 600, margin: '0 0 8px 0' }}>
+                Download C-Hub ESS App
+              </h3>
+              <p style={{ fontSize: '13px', color: 'rgba(255, 255, 255, 0.8)', lineHeight: '1.5', margin: '0 0 16px 0' }}>
+                Install the web app to your Android device for a smooth, fast, and native-like check-in & check-out experience every day.
+              </p>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button 
+                  onClick={handleInstallClick} 
+                  className="btn btn-primary" 
+                  style={{
+                    backgroundColor: '#22C55E',
+                    borderColor: '#22C55E',
+                    color: '#FFFFFF',
+                    padding: '8px 16px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  <Download size={16} />
+                  Install App
+                </button>
+                <button 
+                  onClick={handleDismissBanner} 
+                  className="btn btn-secondary" 
+                  style={{
+                    backgroundColor: 'transparent',
+                    borderColor: 'rgba(255, 255, 255, 0.2)',
+                    color: 'rgba(255, 255, 255, 0.6)',
+                    padding: '8px 16px',
+                    fontSize: '13px',
+                    borderRadius: '8px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Maybe Later
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          {/* Close close X button */}
+          <button 
+            onClick={handleDismissBanner}
+            style={{
+              position: 'absolute',
+              top: '12px',
+              right: '12px',
+              background: 'none',
+              border: 'none',
+              color: 'rgba(255, 255, 255, 0.4)',
+              cursor: 'pointer',
+              fontSize: '18px',
+              lineHeight: 1,
+              padding: '4px'
+            }}
+            aria-label="Dismiss"
+          >
+            &times;
+          </button>
+        </div>
+      )}
+
       {/* Welcome Banner Card */}
       <div className="card m-b-20" style={{
         background: 'linear-gradient(135deg, var(--chub-purple) 0%, var(--chub-pink) 100%)',
@@ -118,7 +285,8 @@ export default function ESSDashboard() {
           {leaves.length === 0 ? (
             <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>No leave balance allocated for this year yet.</p>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', textAlign: 'center', marginBottom: '16px' }}>
+            <div className="ess-balances-grid">
+
               {leaves.map((bal, idx) => {
                 const available = bal.total_days - bal.availed_days - bal.pending_days;
                 return (

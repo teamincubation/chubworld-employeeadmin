@@ -170,15 +170,25 @@ export default function Topbar() {
             width: '40px',
             height: '40px',
             borderRadius: '50%',
-            background: 'var(--chub-gradient)',
+            overflow: 'hidden',
+            boxShadow: 'var(--shadow-sm)',
+            border: '2px solid var(--chub-pink)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#FFFFFF',
-            boxShadow: 'var(--shadow-sm)'
+            background: 'var(--chub-gradient)'
           }}>
-            <UserIcon size={18} />
+            {user?.employee?.photo_path ? (
+              <img 
+                src={`${API_BASE_URL}/documents/download/${user.employee.photo_path.split('/').pop()}?token=${localStorage.getItem('token') || ''}`} 
+                alt="Avatar" 
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+            ) : (
+              <UserIcon size={18} style={{ color: '#FFFFFF' }} />
+            )}
           </div>
+
         </div>
       </div>
 

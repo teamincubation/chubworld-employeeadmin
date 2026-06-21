@@ -201,8 +201,18 @@ router.get('/documents/download/:filename', authenticateToken, async (req, res) 
       return res.status(404).json({ message: 'Requested document file not found.' });
     }
 
+    // A. Allow any authenticated user to view/download employee photos
+    const { data: photoRecordMatch } = await supabase
+      .from('employees')
+      .select('id')
+      .ilike('photo_path', `%${targetFilename}%`);
+
+    if (photoRecordMatch && photoRecordMatch.length > 0) {
+      return res.sendFile(path.resolve(filePath));
+    }
+
     // 1. If Super Admin/HR/Finance/Admin Controller/Admin, allow download
-    const canViewKyc = req.user.permissions.includes('kyc:view');
+    const canViewKyc = req.user.permissions && req.user.permissions.includes('kyc:view');
     const isHrOrFinance = req.user.roleName === 'HR Manager' || req.user.roleName === 'Finance Manager';
     const isPrivilegedRole = req.user.roleName === 'Super Admin' || req.user.roleName === 'Admin Controller' || req.user.roleName === 'Admin';
 
@@ -237,4 +247,13 @@ router.get('/documents/download/:filename', authenticateToken, async (req, res) 
   }
 });
 
+// Self-photo update endpoint
+router.post('/employees/me/photo', authenticateToken, handleUpload('document'), employeeController.uploadSelfPhoto);
+
+// Admin Controller management routes
+router.get('/security/admin-controller', authenticateToken, securityController.getAdminController);
+router.post('/security/admin-controller', authenticateToken, securityController.setAdminController);
+router.post('/security/admin-controller/status', authenticateToken, securityController.updateAdminControllerStatus);
+
 module.exports = router;
+

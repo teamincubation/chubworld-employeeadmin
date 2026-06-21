@@ -41,7 +41,7 @@ export function AuthProvider({ children }) {
         logout();
       } else {
         const data = await res.json();
-        setUser(data.user);
+        setUser({ ...data.user, employee: data.employee });
       }
     } catch (err) {
       console.error('Profile fetch failed:', err);
@@ -49,6 +49,7 @@ export function AuthProvider({ children }) {
       setLoading(false);
     }
   };
+
 
   const login = async (email, password) => {
     const res = await fetch(`${API_BASE_URL}/auth/login`, {
@@ -120,7 +121,7 @@ export function AuthProvider({ children }) {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
   return (
-    <AuthContext.Provider value={{ token, user, loading, login, logout, request, theme, toggleTheme, mobileDrawerOpen, setMobileDrawerOpen }}>
+    <AuthContext.Provider value={{ token, user, loading, login, logout, request, theme, toggleTheme, mobileDrawerOpen, setMobileDrawerOpen, fetchProfile }}>
       {children}
     </AuthContext.Provider>
   );

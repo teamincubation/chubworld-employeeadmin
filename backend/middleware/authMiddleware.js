@@ -56,6 +56,27 @@ async function authenticateToken(req, res, next) {
       permissions: userPermissions
     };
 
+    // Emergency lockdown check
+    if (roleName !== 'Super Admin') {
+      const { data: accessData } = await supabase
+        .from('admin_controller_access')
+        .select('status')
+        .limit(1);
+
+      if (accessData && accessData.length > 0 && accessData[0].status !== 'Active') {
+        const sysStatus = accessData[0].status;
+        let errMsg = 'Access Denied: The system has been locked down by the Super Admin.';
+        if (sysStatus === 'Paused') {
+          errMsg = 'Access Suspended: The system has been locked down by the Super Admin.';
+        } else if (sysStatus === 'Deactivated') {
+          errMsg = 'Access Denied: Admin Controller access has been deactivated by the Super Admin.';
+        } else if (sysStatus === 'Revoked') {
+          errMsg = 'Access Denied: Admin Controller access has been revoked by the Super Admin.';
+        }
+        return res.status(403).json({ message: errMsg });
+      }
+    }
+
     // If Employee is logged in, we fetch their Employee table record ID and attach it
     if (roleName === 'Employee') {
       const { data: employees, error: empError } = await supabase
@@ -70,6 +91,7 @@ async function authenticateToken(req, res, next) {
         req.user.onboardingStatus = employees[0].onboarding_status;
       }
     }
+
 
     next();
   } catch (err) {

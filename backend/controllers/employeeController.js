@@ -247,6 +247,12 @@ const employeeController = {
       .is('deleted_at', null)
       .order('id', { ascending: false });
 
+    // Hide Super Admin employee record from other admin views
+    if (req.user.roleName !== 'Super Admin') {
+      query = query.neq('email', 'chub.admin@adloaf.com');
+    }
+
+
     if (search) {
       query = query.or(`full_name.ilike.%${search}%,employee_id.ilike.%${search}%,mobile.ilike.%${search}%,email.ilike.%${search}%`);
     }
@@ -306,6 +312,12 @@ const employeeController = {
       }
 
       const employeeRaw = employees[0];
+
+      // Hide Super Admin profile from non-Super Admins
+      if (req.user.roleName !== 'Super Admin' && (employeeRaw.id === 1 || employeeRaw.email === 'chub.admin@adloaf.com')) {
+        return res.status(404).json({ message: 'Employee not found.' });
+      }
+
 
       // Fetch manager separately to avoid complex self-join query errors in Supabase JS
       let manager_name = null;
@@ -498,6 +510,21 @@ const employeeController = {
         return res.status(404).json({ message: 'Employee not found.' });
       }
 
+      // Block self-deletion or deleting the Admin Controller (unless Super Admin is the requester)
+      if (req.user.roleName !== 'Super Admin') {
+        if (employee[0].user_id === req.user.id) {
+          return res.status(403).json({ message: 'Access denied: You cannot delete your own account.' });
+        }
+
+        if (employee[0].user_id) {
+          const { data: userRec } = await supabase.from('users').select('role_id').eq('id', employee[0].user_id).single();
+          if (userRec && userRec.role_id === 7) {
+            return res.status(403).json({ message: 'Access denied: Cannot delete the Admin Controller account.' });
+          }
+        }
+      }
+
+
       // Perform Soft Delete
       await supabase.from('employees').update({ deleted_at: new Date().toISOString(), status: 'Inactive' }).eq('id', id);
 
@@ -552,7 +579,13 @@ const employeeController = {
         .is('deleted_at', null);
 
       if (error) throw error;
-      res.json(list || []);
+      
+      let filteredList = list || [];
+      if (req.user.roleName !== 'Super Admin') {
+        filteredList = filteredList.filter(emp => emp.id !== 1 && emp.employee_id !== 'CHUB-EMP-001');
+      }
+      res.json(filteredList);
+
     } catch (err) {
       console.error('Dropdown retrieve error:', err.message);
       res.status(500).json({ message: 'Error loading choices.' });
@@ -621,6 +654,49 @@ const employeeController = {
     } catch (err) {
       console.error('Document Delete Error:', err.message);
       res.status(500).json({ message: 'Error deleting document.' });
+    }
+  },
+
+  // Self photo upload handler
+  uploadSelfPhoto: async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No photo file provided.' });
+    }
+
+    try {
+      const { data: employee, error } = await supabase
+        .from('employees')
+        .select('id')
+        .eq('user_id', req.user.id);
+
+      if (error || !employee || employee.length === 0) {
+        return res.status(404).json({ message: 'Employee profile not found for this user.' });
+      }
+
+      const empId = employee[0].id;
+      const docName = req.file.originalname;
+      const docPath = req.file.path.replace(/\\/g, '/');
+      const docSize = req.file.size;
+
+      // Insert document
+      await supabase.from('employee_documents').insert([{
+        employee_id: empId,
+        document_type: 'Other',
+        document_name: docName,
+        file_path: docPath,
+        file_size: docSize
+      }]);
+
+      // Update employee photo
+      await supabase.from('employees').update({ photo_path: docPath }).eq('id', empId);
+
+      // Log audit
+      await logAudit(req, 'UPLOAD_SELF_PHOTO', `employees/${empId}`, null, { name: docName });
+
+      res.json({ message: 'Profile photo updated successfully.', photoPath: docPath });
+    } catch (err) {
+      console.error('Self Photo Upload Error:', err.message);
+      res.status(500).json({ message: 'Error uploading profile photo.' });
     }
   }
 };

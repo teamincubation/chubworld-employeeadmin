@@ -212,7 +212,7 @@ export default function ESSPerformance() {
               </div>
 
               {/* Grid content */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px', minHeight: '260px' }}>
+              <div className="ess-calendar-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px', minHeight: '260px' }}>
                 {daysGrid.map((day, idx) => {
                   const log = getDayLog(day);
                   const styles = getDayStyles(log);
@@ -220,6 +220,7 @@ export default function ESSPerformance() {
                   return (
                     <div 
                       key={idx}
+                      className="calendar-day-cell"
                       style={{
                         backgroundColor: styles.bg,
                         color: styles.color,
@@ -237,7 +238,7 @@ export default function ESSPerformance() {
                         <>
                           <span style={{ fontSize: '12px', fontWeight: 'bold' }}>{day}</span>
                           {log && (
-                            <span style={{ fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', display: 'block', textAlign: 'right' }}>
+                            <span className="calendar-day-status" style={{ fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', display: 'block', textAlign: 'right' }}>
                               {log.status === 'Location Not Verified' ? 'No GPS' : log.status}
                             </span>
                           )}
@@ -247,6 +248,7 @@ export default function ESSPerformance() {
                   );
                 })}
               </div>
+
             </div>
           </div>
 

@@ -3,11 +3,13 @@ import { useAuth, API_BASE_URL } from '../context/AuthContext';
 import { User, Lock, Key, ShieldAlert, CheckCircle, FileText } from 'lucide-react';
 
 export default function ESSProfile() {
-  const { request } = useAuth();
+  const { request, fetchProfile: refreshGlobalProfile } = useAuth();
   
   // Profile state
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
 
   // Password reset state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -37,6 +39,42 @@ export default function ESSProfile() {
       setLoading(false);
     }
   };
+
+  const handlePhotoChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Photo file size exceeds the 5MB limit.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('document', file);
+
+    setUploadingPhoto(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/employees/me/photo`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        body: formData
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || 'Failed to upload photo.');
+      }
+      alert('Profile photo updated successfully.');
+      
+      // Refresh AuthContext globally and local ESS state
+      await refreshGlobalProfile();
+      await fetchProfile();
+    } catch (err) {
+      alert(err.message || 'Error uploading profile photo.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
@@ -99,21 +137,47 @@ export default function ESSProfile() {
           
           {/* Header Summary */}
           <div className="card" style={{ display: 'flex', gap: '24px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{
-              width: '80px', height: '80px', borderRadius: '12px',
-              background: 'var(--chub-light-lavender)', border: '2px solid var(--chub-pink)',
-              display: 'flex', alignItems: 'center', justifyCenter: 'center', justifyContent: 'center',
-              overflow: 'hidden', flexShrink: 0
-            }}>
-              {employee.photo_path ? (
-                <img 
-                  src={`${API_BASE_URL}/documents/download/${employee.photo_path.split('/').pop()}`} 
-                  alt="Avatar" 
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-              ) : (
-                <User size={36} style={{ color: 'var(--chub-purple)' }} />
-              )}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+              <div style={{
+                width: '100px', height: '100px', borderRadius: '50%',
+                background: 'var(--chub-light-lavender)', border: '3px solid var(--chub-pink)',
+                display: 'flex', alignItems: 'center', justifyCenter: 'center', justifyContent: 'center',
+                overflow: 'hidden', flexShrink: 0, position: 'relative', boxShadow: 'var(--shadow-md)'
+              }}>
+                {employee.photo_path ? (
+                  <img 
+                    src={`${API_BASE_URL}/documents/download/${employee.photo_path.split('/').pop()}?token=${localStorage.getItem('token')}`} 
+                    alt="Avatar" 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  <User size={44} style={{ color: 'var(--chub-purple)' }} />
+                )}
+              </div>
+              <label 
+                htmlFor="profile-avatar-upload" 
+                className="btn btn-secondary" 
+                style={{ 
+                  padding: '4px 10px', 
+                  fontSize: '11px', 
+                  borderRadius: '16px', 
+                  cursor: 'pointer',
+                  borderWidth: '1px',
+                  textTransform: 'uppercase',
+                  fontWeight: 600,
+                  letterSpacing: '0.5px'
+                }}
+              >
+                {uploadingPhoto ? 'Uploading...' : 'Change Photo'}
+              </label>
+              <input 
+                type="file" 
+                id="profile-avatar-upload" 
+                accept="image/*" 
+                onChange={handlePhotoChange} 
+                style={{ display: 'none' }} 
+                disabled={uploadingPhoto}
+              />
             </div>
             <div>
               <h3 style={{ fontSize: '22px', color: 'var(--chub-purple)', margin: 0 }}>{employee.full_name}</h3>
@@ -126,6 +190,7 @@ export default function ESSProfile() {
               </div>
             </div>
           </div>
+
 
           {/* Details Section */}
           <div className="card">
@@ -215,31 +280,7 @@ export default function ESSProfile() {
             </form>
           </div>
 
-          {/* Documents Registry */}
-          <div className="card">
-            <h4 style={{ fontSize: '15px', color: 'var(--chub-purple)', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', marginBottom: '16px' }}>
-              My Uploaded Documents
-            </h4>
-            {documents.length === 0 ? (
-              <p style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center' }}>No attachments found.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {documents.map((doc) => (
-                  <div key={doc.id} className="flex-between" style={{ padding: '8px 12px', backgroundColor: 'var(--bg-primary)', borderRadius: '6px', fontSize: '13px' }}>
-                    <span style={{ fontWeight: 600 }}>{doc.document_type}</span>
-                    <a 
-                      href={`${API_BASE_URL}/documents/download/doc-${doc.id}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ color: 'var(--chub-pink)', display: 'flex', alignItems: 'center', gap: '4px' }}
-                    >
-                      <FileText size={14} /> Open file
-                    </a>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+
 
         </div>
 

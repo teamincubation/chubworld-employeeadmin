@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { ShieldCheck, ShieldAlert, CheckCircle, Plus, Edit3, Trash2, Key, Users, Settings } from 'lucide-react';
+import { useAuth, API_BASE_URL } from '../context/AuthContext';
+import { 
+  ShieldCheck, ShieldAlert, CheckCircle, Plus, Edit3, Trash2, 
+  Key, Users, Settings, Play, Pause, Power, Ban, Clock 
+} from 'lucide-react';
 
 export default function LicensingCenter() {
   const { request, user } = useAuth();
@@ -17,9 +20,31 @@ export default function LicensingCenter() {
   const [error, setError] = useState('');
   const [licensingSaving, setLicensingSaving] = useState(false);
 
+  // Admin Controller specific states
+  const [employeesList, setEmployeesList] = useState([]);
+  const [adminController, setAdminController] = useState(null);
+  const [adminCtrlName, setAdminCtrlName] = useState('');
+  const [adminCtrlEmail, setAdminCtrlEmail] = useState('');
+  const [inputPassword, setInputPassword] = useState('');
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [statusUpdating, setStatusUpdating] = useState(false);
+
   useEffect(() => {
     fetchData();
   }, [activeSubTab]);
+
+  useEffect(() => {
+    let timer;
+    if (activeSubTab === 'controller' && adminController && adminController.status === 'Active' && adminController.activated_at) {
+      timer = setInterval(() => {
+        const start = new Date(adminController.activated_at).getTime();
+        const elapsed = Math.floor((Date.now() - start) / 1000);
+        const base = adminController.total_active_seconds || 0;
+        setElapsedSeconds(base + (elapsed > 0 ? elapsed : 0));
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [activeSubTab, adminController]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -28,12 +53,29 @@ export default function LicensingCenter() {
       if (activeSubTab === 'controller') {
         const lic = await request('/security/licensing');
         setLicensingData(lic || { modules: [], admin_creation_limit: 3 });
+
+        // Fetch active employees dropdown list
+        const emps = await request('/employees/dropdown');
+        setEmployeesList(emps || []);
+
+        // Fetch current Admin Controller details
+        const controller = await request('/security/admin-controller');
+        setAdminController(controller);
+        if (controller) {
+          setElapsedSeconds(controller.accumulated_seconds || 0);
+          setAdminCtrlName(controller.full_name || '');
+          setAdminCtrlEmail(controller.email || '');
+          setInputPassword(controller.password_plain || '');
+        } else {
+          setElapsedSeconds(0);
+          setAdminCtrlName('');
+          setAdminCtrlEmail('');
+          setInputPassword('');
+        }
       } else if (activeSubTab === 'subadmins') {
-        // Fetch Admin Controller license modules to show which modules can be shared
         const lic = await request('/security/licensing');
         setLicensingData(lic || { modules: [], admin_creation_limit: 3 });
         
-        // Fetch users list and filter sub-admins
         const userList = await request('/security/users');
         const subAdmins = (userList || []).filter(u => u.role_name !== 'Employee' && u.role_name !== 'Super Admin' && u.role_name !== 'Admin Controller');
         setSubAdminsList(subAdmins);
@@ -95,6 +137,63 @@ export default function LicensingCenter() {
     }
   };
 
+  const handleAssignAdminController = async (e) => {
+    e.preventDefault();
+    if (!adminCtrlName || !adminCtrlEmail || !inputPassword) {
+      alert('Please fill out the name, email, and password fields.');
+      return;
+    }
+    setLicensingSaving(true);
+    try {
+      await request('/security/admin-controller', {
+        method: 'POST',
+        body: { name: adminCtrlName, email: adminCtrlEmail, password: inputPassword }
+      });
+      alert('Admin Controller assigned successfully.');
+      fetchData();
+    } catch (err) {
+      alert(err.message || 'Failed to assign Admin Controller.');
+    } finally {
+      setLicensingSaving(false);
+    }
+  };
+
+  const handleUpdateStatus = async (newStatus) => {
+    if (!adminController) return;
+    if (newStatus === 'Paused' && !window.confirm('Emergency Action: Are you sure you want to PAUSE Admin Controller access? This will lock out all employees and sub-admins from signing in or managing data.')) {
+      return;
+    }
+    setStatusUpdating(true);
+    try {
+      await request('/security/admin-controller/status', {
+        method: 'POST',
+        body: { status: newStatus }
+      });
+      alert(`Admin Controller status changed to ${newStatus}.`);
+      fetchData();
+    } catch (err) {
+      alert(err.message || 'Failed to update access status.');
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
+
+  const formatDuration = (totalSeconds) => {
+    if (!totalSeconds || totalSeconds < 0) return '0 seconds';
+    const days = Math.floor(totalSeconds / (3600 * 24));
+    const hours = Math.floor((totalSeconds % (3600 * 24)) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    const parts = [];
+    if (days > 0) parts.push(`${days} day${days > 1 ? 's' : ''}`);
+    if (hours > 0) parts.push(`${hours} hr${hours > 1 ? 's' : ''}`);
+    if (minutes > 0) parts.push(`${minutes} min${minutes > 1 ? 's' : ''}`);
+    parts.push(`${seconds} sec`);
+
+    return parts.join(', ');
+  };
+
   if (user?.role !== 'Super Admin') {
     return (
       <div className="alert alert-error" style={{ marginTop: '40px' }}>
@@ -142,8 +241,184 @@ export default function LicensingCenter() {
             {/* 1. ADMIN CONTROLLER LICENSE MANAGER */}
             {activeSubTab === 'controller' && (
               <div>
+                {/* Admin Controller configuration panel */}
+                <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', marginBottom: '32px' }}>
+                  
+                  {/* Left Column: Configure assignment */}
+                  <div className="card" style={{ flex: 1, minWidth: '300px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)' }}>
+                    <h3 style={{ fontSize: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '20px', color: 'var(--chub-purple)' }}>
+                      Configure Admin Controller Assignment
+                    </h3>
+                    <form onSubmit={handleAssignAdminController}>
+                      <div className="form-group">
+                        <label className="form-label" style={{ fontWeight: 600 }}>Admin Controller Name</label>
+                        <input 
+                          type="text"
+                          className="form-control"
+                          placeholder="Admin name"
+                          value={adminCtrlName}
+                          onChange={(e) => setAdminCtrlName(e.target.value)}
+                          required
+                        />
+                        <small style={{ color: 'var(--text-muted)' }}>Standalone administrative name for the Controller.</small>
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label" style={{ fontWeight: 600 }}>Admin Controller Email ID</label>
+                        <input 
+                          type="email"
+                          className="form-control"
+                          placeholder="admin@chubworld.com"
+                          value={adminCtrlEmail}
+                          onChange={(e) => setAdminCtrlEmail(e.target.value)}
+                          required
+                        />
+                        <small style={{ color: 'var(--text-muted)' }}>Standalone login email ID for the Admin Controller.</small>
+                      </div>
+
+                      <div className="form-group" style={{ marginBottom: '24px' }}>
+                        <label className="form-label" style={{ fontWeight: 600 }}>Assign Admin Password</label>
+                        <input 
+                          type="text" 
+                          className="form-control"
+                          placeholder="Provide login password"
+                          value={inputPassword}
+                          onChange={(e) => setInputPassword(e.target.value)}
+                          required
+                        />
+                        <small style={{ color: 'var(--text-muted)' }}>Provides plain administrative login credentials password to Controller.</small>
+                      </div>
+
+                      <button type="submit" className="btn btn-primary" disabled={licensingSaving} style={{ width: '100%', background: 'var(--chub-gradient)' }}>
+                        {licensingSaving ? 'Assigning...' : 'Save & Assign Controller'}
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Right Column: Emergency Access Controls */}
+                  <div className="card" style={{ flex: 1.2, minWidth: '320px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid var(--border-color)' }}>
+                    <div>
+                      <h3 style={{ fontSize: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '20px', color: 'var(--chub-purple)' }}>
+                        Emergency Access Controls
+                      </h3>
+
+                      {adminController ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '14px' }}>
+                          <div className="flex-between">
+                            <strong>Controller Profile:</strong>
+                            <span style={{ fontWeight: 600, color: 'var(--chub-pink)' }}>
+                              {adminController.full_name} ({adminController.employee_id})
+                            </span>
+                          </div>
+                          <div className="flex-between">
+                            <strong>Controller Email:</strong>
+                            <span style={{ fontFamily: 'monospace' }}>{adminController.email}</span>
+                          </div>
+                          <div className="flex-between">
+                            <strong>Access status:</strong>
+                            <span className={`badge ${
+                              adminController.status === 'Active' ? 'badge-active' :
+                              adminController.status === 'Paused' ? 'badge-pending' :
+                              'badge-rejected'
+                            }`}>
+                              {adminController.status}
+                            </span>
+                          </div>
+
+                          <div style={{ 
+                            marginTop: '8px', 
+                            padding: '12px', 
+                            backgroundColor: 'var(--chub-light-lavender)', 
+                            borderRadius: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            border: '1px solid var(--border-color)'
+                          }}>
+                            <Clock size={18} className={adminController.status === 'Active' ? 'pulse' : ''} style={{ color: 'var(--chub-purple)' }} />
+                            <div>
+                              <span style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', fontWeight: 600 }}>TOTAL ACCUMULATED ACTIVE DURATION</span>
+                              <strong style={{ fontSize: '15px', color: 'var(--chub-purple)', fontFamily: 'monospace' }}>
+                                {formatDuration(elapsedSeconds)}
+                              </strong>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <p style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>No Admin Controller currently configured.</p>
+                      )}
+                    </div>
+
+                    {adminController && (
+                      <div style={{ marginTop: '20px', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
+                        <label className="form-label" style={{ fontWeight: 600, marginBottom: '10px' }}>Emergency Toggles</label>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+                          <button 
+                            onClick={() => handleUpdateStatus('Active')}
+                            className="btn btn-secondary"
+                            disabled={adminController.status === 'Active' || statusUpdating}
+                            style={{ 
+                              borderColor: 'var(--color-success)', 
+                              color: adminController.status === 'Active' ? 'var(--text-muted)' : 'var(--color-success)',
+                              fontSize: '11px',
+                              padding: '8px 12px'
+                            }}
+                          >
+                            <Play size={12} /> Resume
+                          </button>
+                          <button 
+                            onClick={() => handleUpdateStatus('Paused')}
+                            className="btn btn-secondary"
+                            disabled={adminController.status === 'Paused' || statusUpdating}
+                            style={{ 
+                              borderColor: 'var(--color-warning)', 
+                              color: adminController.status === 'Paused' ? 'var(--text-muted)' : 'var(--color-warning)',
+                              fontSize: '11px',
+                              padding: '8px 12px'
+                            }}
+                          >
+                            <Pause size={12} /> Pause
+                          </button>
+                          <button 
+                            onClick={() => handleUpdateStatus('Deactivated')}
+                            className="btn btn-secondary"
+                            disabled={adminController.status === 'Deactivated' || statusUpdating}
+                            style={{ 
+                              borderColor: 'var(--text-muted)', 
+                              color: adminController.status === 'Deactivated' ? 'var(--text-muted)' : 'var(--text-muted)',
+                              fontSize: '11px',
+                              padding: '8px 12px'
+                            }}
+                          >
+                            <Power size={12} /> Deactivate
+                          </button>
+                          <button 
+                            onClick={() => handleUpdateStatus('Revoked')}
+                            className="btn btn-danger"
+                            disabled={adminController.status === 'Revoked' || statusUpdating}
+                            style={{ 
+                              fontSize: '11px',
+                              padding: '8px 12px'
+                            }}
+                          >
+                            <Ban size={12} /> Revoke
+                          </button>
+                        </div>
+
+                        {adminController.status === 'Paused' && (
+                          <div className="alert alert-warning" style={{ marginTop: '12px', padding: '8px 12px', fontSize: '11px', marginBottom: 0 }}>
+                            <ShieldAlert size={14} style={{ flexShrink: 0 }} />
+                            <span><strong>Emergency lock:</strong> Employees, sub-admins & controller are blocked from signing in or managing data.</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+
                 <h3 style={{ fontSize: '18px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '20px', color: 'var(--chub-purple)' }}>
-                  Admin Controller Subscription Settings
+                  Admin Controller License Settings
                 </h3>
 
                 <form onSubmit={handleSaveLicensing} style={{ maxWidth: '700px' }}>
@@ -158,6 +433,7 @@ export default function LicensingCenter() {
                     />
                     <small style={{ color: 'var(--text-muted)' }}>Sets the count limit of admins the Admin Controller can add to manage the system.</small>
                   </div>
+
 
                   <h4 style={{ fontSize: '15px', color: 'var(--chub-pink)', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     Module Access Config for Admin Controller
@@ -195,7 +471,7 @@ export default function LicensingCenter() {
                         setLicensingData({ ...licensingData, modules: newModules });
                       };
 
-                      const hasNoValidity = end === null;
+                      const hasNoValidity = end === null || end === '';
 
                       return (
                         <div key={m.key} className="card" style={{ padding: '16px', backgroundColor: 'var(--bg-primary)', border: isEnabled ? '1px solid var(--chub-pink)' : '1px solid var(--border-color)' }}>
@@ -215,6 +491,7 @@ export default function LicensingCenter() {
                                 <input 
                                   type="date" 
                                   className="form-control" 
+                                  disabled={!isEnabled}
                                   value={start ? start.split('T')[0] : ''} 
                                   onChange={(e) => updateModuleField('subscription_start_date', e.target.value)} 
                                   style={{ height: '32px', padding: '4px 8px', fontSize: '12px' }}
@@ -225,7 +502,7 @@ export default function LicensingCenter() {
                                 <input 
                                   type="date" 
                                   className="form-control" 
-                                  disabled={hasNoValidity}
+                                  disabled={!isEnabled || hasNoValidity}
                                   value={end ? end.split('T')[0] : ''} 
                                   onChange={(e) => updateModuleField('subscription_end_date', e.target.value || null)} 
                                   style={{ height: '32px', padding: '4px 8px', fontSize: '12px' }}
@@ -234,8 +511,9 @@ export default function LicensingCenter() {
                               <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', cursor: 'pointer', paddingBottom: '8px' }}>
                                 <input 
                                   type="checkbox" 
+                                  disabled={!isEnabled}
                                   checked={hasNoValidity}
-                                  onChange={(e) => updateModuleField('subscription_end_date', e.target.checked ? null : '')}
+                                  onChange={(e) => updateModuleField('subscription_end_date', e.target.checked ? null : new Date().toISOString().split('T')[0])}
                                 />
                                 No Validity
                               </label>
@@ -338,7 +616,7 @@ export default function LicensingCenter() {
                               setSubAdminAccess(newAccess);
                             };
 
-                            const hasNoValidity = end === null;
+                            const hasNoValidity = end === null || end === '';
 
                             return (
                               <div key={m.module_key} style={{ padding: '12px 16px', border: '1px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--bg-primary)' }}>
@@ -358,6 +636,7 @@ export default function LicensingCenter() {
                                       <input 
                                         type="date" 
                                         className="form-control" 
+                                        disabled={!isEnabled}
                                         value={start ? start.split('T')[0] : ''} 
                                         onChange={(e) => updateSubModuleField('subscription_start_date', e.target.value)} 
                                         style={{ height: '30px', padding: '2px 6px', fontSize: '11px' }}
@@ -368,7 +647,7 @@ export default function LicensingCenter() {
                                       <input 
                                         type="date" 
                                         className="form-control" 
-                                        disabled={hasNoValidity}
+                                        disabled={!isEnabled || hasNoValidity}
                                         value={end ? end.split('T')[0] : ''} 
                                         onChange={(e) => updateSubModuleField('subscription_end_date', e.target.value || null)} 
                                         style={{ height: '30px', padding: '2px 6px', fontSize: '11px' }}
@@ -377,8 +656,9 @@ export default function LicensingCenter() {
                                     <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', cursor: 'pointer', paddingBottom: '6px' }}>
                                       <input 
                                         type="checkbox" 
+                                        disabled={!isEnabled}
                                         checked={hasNoValidity}
-                                        onChange={(e) => updateSubModuleField('subscription_end_date', e.target.checked ? null : '')}
+                                        onChange={(e) => updateSubModuleField('subscription_end_date', e.target.checked ? null : new Date().toISOString().split('T')[0])}
                                       />
                                       No Validity
                                     </label>

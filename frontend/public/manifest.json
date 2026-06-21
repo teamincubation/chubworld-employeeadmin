@@ -1,0 +1,18 @@
+{
+  "name": "C-Hub ESS Portal",
+  "short_name": "C-Hub ESS",
+  "description": "C-Hub Employee Self-Service Mobile Application for Clock In / Out and Leaves.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1a1321",
+  "theme_color": "#6a1b9a",
+  "icons": [
+    {
+      "src": "/logo.jpeg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}

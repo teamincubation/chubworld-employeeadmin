@@ -59,10 +59,34 @@ const authController = {
       const user = users[0];
       const roleName = user.roles ? user.roles.name : '';
 
+      // Emergency lockdown check
+      if (roleName !== 'Super Admin') {
+        const { data: accessData } = await supabase
+          .from('admin_controller_access')
+          .select('status')
+          .limit(1);
+
+        if (accessData && accessData.length > 0 && accessData[0].status !== 'Active') {
+          const sysStatus = accessData[0].status;
+          await recordLoginHistory(user.id, email, ip, userAgent, 'Failed', `Blocked: Emergency lockdown (${sysStatus})`);
+          
+          let errMsg = 'Access Denied: The system has been locked down by the Super Admin.';
+          if (sysStatus === 'Paused') {
+            errMsg = 'Access Suspended: The system has been locked down by the Super Admin.';
+          } else if (sysStatus === 'Deactivated') {
+            errMsg = 'Access Denied: Admin Controller access has been deactivated by the Super Admin.';
+          } else if (sysStatus === 'Revoked') {
+            errMsg = 'Access Denied: Admin Controller access has been revoked by the Super Admin.';
+          }
+          return res.status(403).json({ message: errMsg });
+        }
+      }
+
       if (user.status !== 'active') {
         await recordLoginHistory(user.id, email, ip, userAgent, 'Failed', 'Account deactivated');
         return res.status(403).json({ message: 'Your account is deactivated.' });
       }
+
 
       // Check password
       const isMatch = await bcrypt.compare(password, user.password_hash);
@@ -357,17 +381,34 @@ const authController = {
       const roleName = user.roles ? user.roles.name : '';
       let employeeProfile = null;
 
-      // If it's an employee, attach profile
-      if (roleName === 'Employee') {
-        const { data: empProfile, error: empError } = await supabase
-          .from('employees')
-          .select('id, employee_id, full_name, mobile, onboarding_status, photo_path')
-          .eq('user_id', user.id);
-          
-        if (!empError && empProfile && empProfile.length > 0) {
-          employeeProfile = empProfile[0];
+      // Fetch employee profile details if linked to this user account
+      const { data: empProfile, error: empError } = await supabase
+        .from('employees')
+        .select('id, employee_id, full_name, mobile, onboarding_status, photo_path')
+        .eq('user_id', user.id);
+        
+      if (!empError && empProfile && empProfile.length > 0) {
+        employeeProfile = empProfile[0];
+      } else if (roleName === 'Admin Controller') {
+        const { data: controllerAcc } = await supabase
+          .from('admin_controller_access')
+          .select('full_name, email')
+          .eq('user_id', user.id)
+          .limit(1);
+
+        if (controllerAcc && controllerAcc.length > 0) {
+          employeeProfile = {
+            id: null,
+            employee_id: 'ADMIN-CTRL',
+            full_name: controllerAcc[0].full_name,
+            email: controllerAcc[0].email,
+            mobile: 'N/A',
+            onboarding_status: 'Onboarding Completed',
+            photo_path: null
+          };
         }
       }
+
 
       res.json({
         user: {
