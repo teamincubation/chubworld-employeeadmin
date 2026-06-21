@@ -207,16 +207,46 @@ router.get('/documents/download/:filename', authenticateToken, async (req, res) 
   }
 });
 
-// Debug route to see environment variables on production
-router.get('/temp-debug-env', (req, res) => {
-  res.json({
-    SUPABASE_URL: process.env.SUPABASE_URL,
-    SUPABASE_API_KEY: process.env.SUPABASE_API_KEY,
-    SMTP_HOST: process.env.SMTP_HOST,
-    SMTP_PORT: process.env.SMTP_PORT,
-    SMTP_USER: process.env.SMTP_USER,
-    SMTP_PASS: process.env.SMTP_PASS,
-  });
+// Debug route to test direct Postgres connections from Hostinger
+router.get('/temp-db-test', async (req, res) => {
+  const { Client } = require('pg');
+  const hosts = [
+    'db.mcolsszozjnveoommnuk.supabase.co',
+    'aws-0-ap-southeast-1.pooler.supabase.com'
+  ];
+  const passwords = [
+    'ChubAdmin$2027#',
+    'SuperAdmin@123',
+    'ChubAdmin$2026#',
+    'AdloafDevs$2027#',
+    'ChubDevs$2027#',
+    'chubworld'
+  ];
+
+  const results = [];
+
+  for (const host of hosts) {
+    for (const password of passwords) {
+      const client = new Client({
+        host: host,
+        port: 5432,
+        database: 'postgres',
+        user: 'postgres',
+        password: password,
+        ssl: { rejectUnauthorized: false }
+      });
+
+      try {
+        await client.connect();
+        results.push({ host, password, status: 'SUCCESS' });
+        await client.end();
+      } catch (err) {
+        results.push({ host, password, status: 'FAILED', error: err.message });
+      }
+    }
+  }
+
+  res.json({ results });
 });
 
 module.exports = router;
