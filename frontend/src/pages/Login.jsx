@@ -78,7 +78,7 @@ export default function Login() {
             }}
           />
           <h1 style={{
-            fontFamily: 'Oswald',
+            fontFamily: 'Poppins',
             fontSize: '52px',
             lineHeight: 1.1,
             color: '#FFFFFF',
@@ -148,7 +148,7 @@ export default function Login() {
           </div>
 
           <h2 style={{
-            fontFamily: 'Oswald',
+            fontFamily: 'Poppins',
             fontSize: '32px',
             color: '#FFFFFF',
             marginBottom: '8px'

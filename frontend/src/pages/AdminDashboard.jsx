@@ -3,7 +3,8 @@ import { useAuth } from '../context/AuthContext';
 import { 
   Users, UserCheck, UserMinus, UserPlus, 
   CalendarClock, Clock, UserX, AlertTriangle,
-  ArrowRight, ShieldAlert, Plus, CheckCircle, FileText
+  ArrowRight, ShieldAlert, Plus, CheckCircle, FileText,
+  HelpCircle
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -58,19 +59,26 @@ export default function AdminDashboard() {
           <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Welcome back, administrator. Here are today's operations details.</p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
-          <Link to="/employees?add=true" className="btn btn-primary">
-            <Plus size={16} /> Add Employee
-          </Link>
-          <Link to="/leaves" className="btn btn-secondary">
-            <CalendarClock size={16} /> Leave Actions
-          </Link>
+          <div className="tooltip-container">
+            <span className="tooltip-text">Onboard new employees with basic details, addresses, employment info, KYC, and document uploads in a multi-step wizard.</span>
+            <Link to="/employees?add=true" className="btn btn-primary">
+              <Plus size={16} /> Add Employee
+            </Link>
+          </div>
+          <div className="tooltip-container">
+            <span className="tooltip-text">Review and approve/reject employee leave requests, configure leave balances, and manage leave policies.</span>
+            <Link to="/leaves" className="btn btn-secondary">
+              <CalendarClock size={16} /> Leave Actions
+            </Link>
+          </div>
         </div>
       </div>
 
       {/* Grid of Key Statistics (Rounded Gradient Cards) */}
       <div className="grid-cols-4 m-b-20">
         {/* Total Employees */}
-        <div className="card card-hover" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+        <div className="card card-hover tooltip-container" style={{ display: 'flex', alignItems: 'center', gap: '20px', position: 'relative' }}>
+          <span className="tooltip-text">Total number of employees currently registered in the database (including active and inactive profiles).</span>
           <div style={{
             width: '56px', height: '56px', borderRadius: '12px',
             background: 'rgba(66, 23, 79, 0.08)', display: 'flex',
@@ -82,10 +90,12 @@ export default function AdminDashboard() {
             <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Total Register</span>
             <h3 style={{ fontSize: '32px', margin: 0, fontWeight: 700 }}>{employees.total}</h3>
           </div>
+          <HelpCircle size={14} style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--chub-muted)', opacity: 0.7 }} />
         </div>
 
         {/* Active Employees */}
-        <div className="card card-hover" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+        <div className="card card-hover tooltip-container" style={{ display: 'flex', alignItems: 'center', gap: '20px', position: 'relative' }}>
+          <span className="tooltip-text">Current active employees who have access to the ESS dashboard and are counted in active payroll operations.</span>
           <div style={{
             width: '56px', height: '56px', borderRadius: '12px',
             background: 'rgba(34, 197, 94, 0.08)', display: 'flex',
@@ -97,10 +107,12 @@ export default function AdminDashboard() {
             <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Active Employees</span>
             <h3 style={{ fontSize: '32px', margin: 0, fontWeight: 700 }}>{employees.active}</h3>
           </div>
+          <HelpCircle size={14} style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--chub-muted)', opacity: 0.7 }} />
         </div>
 
         {/* Onboarding Pending */}
-        <div className="card card-hover" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+        <div className="card card-hover tooltip-container" style={{ display: 'flex', alignItems: 'center', gap: '20px', position: 'relative' }}>
+          <span className="tooltip-text">Employees who are in Draft, KYC Pending, or HR Review status and have not been fully approved yet.</span>
           <div style={{
             width: '56px', height: '56px', borderRadius: '12px',
             background: 'rgba(245, 158, 11, 0.08)', display: 'flex',
@@ -112,10 +124,12 @@ export default function AdminDashboard() {
             <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>KYC & Onboarding</span>
             <h3 style={{ fontSize: '32px', margin: 0, fontWeight: 700 }}>{employees.pendingOnboarding}</h3>
           </div>
+          <HelpCircle size={14} style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--chub-muted)', opacity: 0.7 }} />
         </div>
 
         {/* Today's Attendance */}
-        <div className="card card-hover" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+        <div className="card card-hover tooltip-container" style={{ display: 'flex', alignItems: 'center', gap: '20px', position: 'relative' }}>
+          <span className="tooltip-text">Count of employees who have clocked in for today's work shifts and verified their attendance.</span>
           <div style={{
             width: '56px', height: '56px', borderRadius: '12px',
             background: 'linear-gradient(135deg, rgba(66, 23, 79, 0.1) 0%, rgba(216, 90, 166, 0.1) 100%)', display: 'flex',
@@ -127,28 +141,33 @@ export default function AdminDashboard() {
             <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Today Present</span>
             <h3 style={{ fontSize: '32px', margin: 0, fontWeight: 700 }}>{attendance.todayPresent}</h3>
           </div>
+          <HelpCircle size={14} style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--chub-muted)', opacity: 0.7 }} />
         </div>
       </div>
 
       {/* Grid of Secondary Attendance Details */}
       <div className="grid-cols-4 m-b-20">
         {/* Late arrivals */}
-        <div className="card" style={{ padding: '16px 20px', borderLeft: '4px solid var(--color-warning)' }}>
+        <div className="card tooltip-container" style={{ padding: '16px 20px', borderLeft: '4px solid var(--color-warning)', position: 'relative' }}>
+          <span className="tooltip-text">Staff members who clocked in after their designated shift start time (including grace period buffer).</span>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>LATE ARRIVALS</span>
           <h4 style={{ fontSize: '24px', margin: '4px 0 0 0' }}>{attendance.lateArrivals}</h4>
         </div>
         {/* Employees on Leave */}
-        <div className="card" style={{ padding: '16px 20px', borderLeft: '4px solid var(--chub-pink)' }}>
+        <div className="card tooltip-container" style={{ padding: '16px 20px', borderLeft: '4px solid var(--chub-pink)', position: 'relative' }}>
+          <span className="tooltip-text">Staff members whose approved leave requests cover the current calendar date.</span>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>EMPLOYEES ON LEAVE</span>
           <h4 style={{ fontSize: '24px', margin: '4px 0 0 0' }}>{attendance.employeesOnLeave}</h4>
         </div>
         {/* Pending Leaves requests */}
-        <div className="card" style={{ padding: '16px 20px', borderLeft: '4px solid var(--color-info)' }}>
+        <div className="card tooltip-container" style={{ padding: '16px 20px', borderLeft: '4px solid var(--color-info)', position: 'relative' }}>
+          <span className="tooltip-text">Submitted leave requests awaiting reviews and actions from administrators or managers.</span>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>PENDING LEAVE REQUESTS</span>
           <h4 style={{ fontSize: '24px', margin: '4px 0 0 0' }}>{attendance.pendingLeaveRequests}</h4>
         </div>
         {/* Onboarding Completed */}
-        <div className="card" style={{ padding: '16px 20px', borderLeft: '4px solid var(--color-success)' }}>
+        <div className="card tooltip-container" style={{ padding: '16px 20px', borderLeft: '4px solid var(--color-success)', position: 'relative' }}>
+          <span className="tooltip-text">Profiles that have completed all verification steps and successfully setup active portal access.</span>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>ONBOARDING COMPLETED</span>
           <h4 style={{ fontSize: '24px', margin: '4px 0 0 0' }}>{employees.completedOnboarding}</h4>
         </div>
@@ -158,7 +177,8 @@ export default function AdminDashboard() {
       <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
         
         {/* Department-wise staff counts */}
-        <div className="card" style={{ flex: 1, minWidth: '320px' }}>
+        <div className="card tooltip-container" style={{ flex: 1, minWidth: '320px', position: 'relative' }}>
+          <span className="tooltip-text">Staff distribution across active corporate departments and functional teams.</span>
           <h3 style={{ fontSize: '18px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '16px' }}>
             Department Analytics
           </h3>
@@ -192,7 +212,8 @@ export default function AdminDashboard() {
           
           {/* Security alerts */}
           {securityAlerts.length > 0 && (
-            <div className="card" style={{ border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+            <div className="card tooltip-container" style={{ border: '1px solid rgba(239, 68, 68, 0.2)', position: 'relative' }}>
+              <span className="tooltip-text">Security warnings detected by the system, including geofencing violations, brute-force attempts, or suspicious activity.</span>
               <div className="flex-between" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '16px' }}>
                 <h3 style={{ fontSize: '18px', color: 'var(--color-error)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <AlertTriangle size={18} /> Active Security Alerts
@@ -218,7 +239,8 @@ export default function AdminDashboard() {
           )}
 
           {/* Recent Audit Activities */}
-          <div className="card">
+          <div className="card tooltip-container" style={{ position: 'relative' }}>
+            <span className="tooltip-text">Real-time log of administrative and user actions, monitored for security compliance and audit trails.</span>
             <div className="flex-between" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '16px' }}>
               <h3 style={{ fontSize: '18px' }}>Recent Operational Activities</h3>
               <Link to="/security" style={{ fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>

@@ -79,7 +79,7 @@ export default function Sidebar() {
               fontWeight: 700, 
               fontSize: '18px', 
               color: '#FFFFFF',
-              fontFamily: 'Oswald',
+              fontFamily: 'Poppins',
               textTransform: 'uppercase',
               letterSpacing: '0.5px'
             }}>C-Hub ERP</span>

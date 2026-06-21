@@ -137,7 +137,7 @@ export default function ESSClockIn() {
         <span style={{ fontSize: '13px', fontWeight: 600, opacity: 0.8, letterSpacing: '1px', textTransform: 'uppercase' }}>
           Real-Time IST System Clock
         </span>
-        <h1 style={{ fontSize: '56px', color: '#FFFFFF', fontFamily: 'Oswald', margin: '12px 0', letterSpacing: '1px' }}>
+        <h1 style={{ fontSize: '56px', color: '#FFFFFF', fontFamily: 'Poppins', margin: '12px 0', letterSpacing: '1px' }}>
           {timeStr || '00:00:00 AM'}
         </h1>
         <p style={{ opacity: 0.9, fontSize: '16px', fontWeight: 500 }}>{dateStr}</p>
@@ -155,7 +155,7 @@ export default function ESSClockIn() {
               className="btn btn-primary"
               style={{
                 width: '180px', height: '180px', borderRadius: '50%',
-                fontSize: '22px', fontFamily: 'Oswald', display: 'inline-flex',
+                fontSize: '22px', fontFamily: 'Poppins', display: 'inline-flex',
                 flexDirection: 'column', gap: '8px', boxShadow: '0 10px 25px rgba(216, 90, 166, 0.4)'
               }}
               disabled={loading || fetchingGps}
@@ -170,7 +170,7 @@ export default function ESSClockIn() {
               className="btn"
               style={{
                 width: '180px', height: '180px', borderRadius: '50%',
-                fontSize: '22px', fontFamily: 'Oswald', display: 'inline-flex',
+                fontSize: '22px', fontFamily: 'Poppins', display: 'inline-flex',
                 flexDirection: 'column', gap: '8px', background: 'linear-gradient(135deg, #F15BC4 0%, #D85AA6 100%)',
                 color: '#FFFFFF', boxShadow: '0 10px 25px rgba(241, 91, 196, 0.4)'
               }}
@@ -188,7 +188,7 @@ export default function ESSClockIn() {
               justifyContent: 'center', gap: '8px', border: '3px dashed var(--chub-purple)'
             }}>
               <CheckCircle size={36} />
-              <span style={{ fontSize: '18px', fontFamily: 'Oswald', fontWeight: 'bold' }}>COMPLETED</span>
+              <span style={{ fontSize: '18px', fontFamily: 'Poppins', fontWeight: 'bold' }}>COMPLETED</span>
             </div>
           )}
         </div>

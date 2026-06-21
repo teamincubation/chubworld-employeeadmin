@@ -3,7 +3,8 @@ import { useAuth, API_BASE_URL } from '../context/AuthContext';
 import { 
   Search, Filter, Plus, Edit2, Trash2, Eye, 
   Download, Printer, Check, X, ShieldAlert, 
-  MapPin, Lock, Unlock, FileText, ArrowLeft, ArrowRight
+  MapPin, Lock, Unlock, FileText, ArrowLeft, ArrowRight,
+  Users, CheckCircle
 } from 'lucide-react';
 
 export default function EmployeeRegister() {
@@ -46,6 +47,10 @@ export default function EmployeeRegister() {
     aadhaar_number: '', pan_number: '', bank_account_number: '',
     bank_name: '', bank_ifsc: '', upi_id: ''
   });
+
+  const [successMessage, setSuccessMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittingText, setSubmittingText] = useState('');
 
   // Files state
   const [photoFile, setPhotoFile] = useState(null);
@@ -159,19 +164,30 @@ export default function EmployeeRegister() {
     e.preventDefault();
     try {
       setError('');
+      setIsSubmitting(true);
+      setSubmittingText('Creating employee profile in database...');
+      
       const response = await request('/employees', {
         method: 'POST',
         body: formData
       });
       
       const newId = response.employeeId;
+      setSubmittingText('Uploading employee photo and document attachments...');
       await uploadAllFiles(newId);
       
-      alert('Employee profile created successfully.');
+      setIsSubmitting(false);
+      setSubmittingText('');
+      
+      setViewMode('list');
       resetForm();
       fetchListData();
-      setViewMode('list');
+      
+      setSuccessMessage('Employee profile and documents created successfully!');
+      setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err) {
+      setIsSubmitting(false);
+      setSubmittingText('');
       setError(err.message || 'Failed to create employee register.');
     }
   };
@@ -180,18 +196,29 @@ export default function EmployeeRegister() {
     e.preventDefault();
     try {
       setError('');
+      setIsSubmitting(true);
+      setSubmittingText('Saving employee profile updates...');
+      
       await request(`/employees/${selectedEmpId}`, {
         method: 'PUT',
         body: formData
       });
       
+      setSubmittingText('Uploading employee photo and document attachments...');
       await uploadAllFiles(selectedEmpId);
       
-      alert('Employee profile updated successfully.');
+      setIsSubmitting(false);
+      setSubmittingText('');
+      
+      setViewMode('list');
       resetForm();
       fetchListData();
-      setViewMode('list');
+      
+      setSuccessMessage('Employee profile and documents updated successfully!');
+      setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err) {
+      setIsSubmitting(false);
+      setSubmittingText('');
       setError(err.message || 'Failed to update employee details.');
     }
   };
@@ -336,11 +363,49 @@ export default function EmployeeRegister() {
     window.print();
   };
 
+  if (isSubmitting) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '60vh',
+        color: 'var(--text-main)',
+        fontFamily: 'Poppins, sans-serif'
+      }}>
+        <div style={{
+          width: '50px',
+          height: '50px',
+          border: '5px solid var(--chub-light-lavender)',
+          borderTop: '5px solid var(--chub-pink)',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite',
+          marginBottom: '20px'
+        }} />
+        <h3 style={{ color: 'var(--chub-purple)', textTransform: 'uppercase', letterSpacing: '1px' }}>Processing Register Setup</h3>
+        <p style={{ color: 'var(--text-muted)', marginTop: '8px', fontSize: '14px' }}>{submittingText}</p>
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
   return (
     <div>
       {/* 1. LIST VIEW */}
       {viewMode === 'list' && (
         <div>
+          {successMessage && (
+            <div className="alert alert-info" style={{ background: 'var(--success-gradient)', color: '#FFFFFF', borderLeft: 'none', marginBottom: '20px', boxShadow: 'var(--shadow-md)' }}>
+              <CheckCircle size={18} />
+              <span style={{ fontWeight: 600 }}>{successMessage}</span>
+            </div>
+          )}
           {/* Header */}
           <div className="flex-between m-b-20">
             <div>

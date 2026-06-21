@@ -59,7 +59,7 @@ function MainAppRouter() {
           alt="C-Hub Logo" 
           style={{ width: '80px', height: '80px', borderRadius: '16px', border: '2px solid var(--chub-pink)', marginBottom: '20px' }}
         />
-        <h3 style={{ fontFamily: 'Oswald', letterSpacing: '1.5px', color: '#FFFFFF' }}>INITIALIZING C-HUB OPERATIONS...</h3>
+        <h3 style={{ fontFamily: 'Poppins', letterSpacing: '1.5px', color: '#FFFFFF' }}>INITIALIZING C-HUB OPERATIONS...</h3>
       </div>
     );
   }

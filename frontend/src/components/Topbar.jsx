@@ -49,7 +49,7 @@ export default function Topbar() {
             fontSize: '16px', 
             fontWeight: 700, 
             color: 'var(--chub-purple)',
-            fontFamily: 'Oswald',
+            fontFamily: 'Poppins',
             letterSpacing: '0.5px'
           }}>{currentTime} IST</span>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500 }}>{currentDate}</span>

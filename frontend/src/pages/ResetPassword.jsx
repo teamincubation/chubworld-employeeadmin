@@ -99,7 +99,7 @@ export default function ResetPassword() {
             }}
           />
           <h1 style={{
-            fontFamily: 'Oswald',
+            fontFamily: 'Poppins',
             fontSize: '52px',
             lineHeight: 1.1,
             color: '#FFFFFF',
@@ -136,7 +136,7 @@ export default function ResetPassword() {
           maxWidth: '440px'
         }}>
           <h2 style={{
-            fontFamily: 'Oswald',
+            fontFamily: 'Poppins',
             fontSize: '32px',
             color: '#FFFFFF',
             marginBottom: '8px'
