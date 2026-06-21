@@ -169,20 +169,36 @@ const authController = {
       const resetLink = `${protocol}://${host}/reset-password?token=${rawToken}`;
       console.log(`[PASSWORD_RESET] Link generated for ${email}: ${resetLink}`);
 
+      // Fetch SMTP settings from DB first
+      let dbSettings = [];
+      try {
+        const { data } = await supabase.from('system_settings').select('*');
+        dbSettings = data || [];
+      } catch (err) {
+        console.warn('Unable to retrieve SMTP settings from database:', err.message);
+      }
+      const settingsMap = {};
+      dbSettings.forEach(s => { settingsMap[s.setting_key] = s.setting_value; });
+
+      const smtpHost = settingsMap.smtp_host || process.env.SMTP_HOST;
+      const smtpPort = settingsMap.smtp_port || process.env.SMTP_PORT;
+      const smtpUser = settingsMap.smtp_user || process.env.SMTP_USER;
+      const smtpPass = settingsMap.smtp_pass || process.env.SMTP_PASS;
+
       // Automated email sending
-      const fromEmail = email === 'chub.admin@adloaf.com' ? 'developers@adloaf.com' : (process.env.SMTP_USER || 'no-reply@chubworld.com');
+      const fromEmail = email === 'chub.admin@adloaf.com' ? 'developers@adloaf.com' : (smtpUser || 'no-reply@chubworld.com');
       let mailSent = false;
       let mailError = null;
 
-      if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+      if (smtpHost && smtpUser && smtpPass) {
         try {
           const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST,
-            port: parseInt(process.env.SMTP_PORT || '587'),
-            secure: process.env.SMTP_PORT === '465',
+            host: smtpHost,
+            port: parseInt(smtpPort || '587'),
+            secure: smtpPort === '465',
             auth: {
-              user: process.env.SMTP_USER,
-              pass: process.env.SMTP_PASS
+              user: smtpUser,
+              pass: smtpPass
             },
             tls: {
               rejectUnauthorized: false

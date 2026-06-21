@@ -160,8 +160,21 @@ export default function EmployeeRegister() {
     }
   };
 
+  const onSubmitWizard = (e) => {
+    if (e) e.preventDefault();
+    if (step < 5) {
+      setStep(step + 1);
+    } else {
+      if (viewMode === 'add') {
+        handleCreateEmployee(e);
+      } else {
+        handleUpdateEmployee(e);
+      }
+    }
+  };
+
   const handleCreateEmployee = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     try {
       setError('');
       setIsSubmitting(true);
@@ -220,6 +233,41 @@ export default function EmployeeRegister() {
       setIsSubmitting(false);
       setSubmittingText('');
       setError(err.message || 'Failed to update employee details.');
+    }
+  };
+
+  const getContractValidity = (contractTillDate) => {
+    if (!contractTillDate) return { text: 'Permanent', days: null, color: '#9e9e9e' };
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const contractDate = new Date(contractTillDate);
+    contractDate.setHours(0, 0, 0, 0);
+    const diffTime = contractDate - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+      return { text: 'Expired', days: diffDays, color: '#e53935' }; // Red
+    } else if (diffDays <= 30) {
+      return { text: 'Expiring <30d', days: diffDays, color: '#ff9800' }; // Orange
+    } else if (diffDays <= 90) {
+      return { text: 'Expires <90d', days: diffDays, color: '#2196f3' }; // Blue
+    } else {
+      return { text: 'Valid', days: diffDays, color: '#4caf50' }; // Green
+    }
+  };
+
+  const handleInstantStatusChange = async (id, newStatus) => {
+    try {
+      setError('');
+      await request(`/employees/${id}`, {
+        method: 'PUT',
+        body: { onboarding_status: newStatus }
+      });
+      setSuccessMessage('Onboarding status updated instantly!');
+      setTimeout(() => setSuccessMessage(''), 4000);
+      fetchListData();
+    } catch (err) {
+      setError(err.message || 'Failed to update onboarding status.');
     }
   };
 
@@ -513,7 +561,8 @@ export default function EmployeeRegister() {
                       <th>Full Name</th>
                       <th>Department</th>
                       <th>Designation</th>
-                      <th>Onboarding</th>
+                      <th>Contract Validity</th>
+                      <th>Onboarding Status</th>
                       <th>Active Status</th>
                       <th>Actions</th>
                     </tr>
@@ -531,15 +580,55 @@ export default function EmployeeRegister() {
                         <td>{emp.department_name || 'Unassigned'}</td>
                         <td>{emp.designation_name || 'Unassigned'}</td>
                         <td>
-                          <span className={`badge ${
-                            emp.onboarding_status === 'Onboarding Completed' || emp.onboarding_status === 'Approved' 
-                              ? 'badge-onboarding' 
-                              : emp.onboarding_status === 'Draft' 
-                              ? 'badge-inactive' 
-                              : 'badge-pending'
-                          }`}>
-                            {emp.onboarding_status}
-                          </span>
+                          {(() => {
+                            const { text, days, color } = getContractValidity(emp.contract_till_date);
+                            if (days === null) {
+                              return <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Permanent</span>;
+                            }
+                            return (
+                              <div>
+                                <span className="badge" style={{ backgroundColor: color + '15', color: color, border: `1px solid ${color}30`, fontWeight: 600 }}>
+                                  {text}
+                                </span>
+                                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                                  {days < 0 ? `${Math.abs(days)} days ago` : `${days} days left`}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </td>
+                        <td>
+                          <select
+                            value={emp.onboarding_status}
+                            onChange={(e) => handleInstantStatusChange(emp.id, e.target.value)}
+                            className="form-control"
+                            style={{
+                              padding: '4px 8px',
+                              fontSize: '12px',
+                              height: 'auto',
+                              width: 'auto',
+                              borderRadius: '6px',
+                              border: '1px solid var(--border-color)',
+                              backgroundColor: emp.onboarding_status === 'Onboarding Completed' || emp.onboarding_status === 'Approved'
+                                ? 'rgba(76, 175, 80, 0.1)'
+                                : emp.onboarding_status === 'Draft'
+                                ? 'rgba(158, 158, 158, 0.1)'
+                                : 'rgba(255, 152, 0, 0.1)',
+                              color: emp.onboarding_status === 'Onboarding Completed' || emp.onboarding_status === 'Approved'
+                                ? '#4CAF50'
+                                : emp.onboarding_status === 'Draft'
+                                ? '#757575'
+                                : '#FF9800',
+                              fontWeight: '600',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <option value="Draft">Draft</option>
+                            <option value="KYC Pending">KYC Pending</option>
+                            <option value="HR Review">HR Review</option>
+                            <option value="Approved">Approved</option>
+                            <option value="Onboarding Completed">Onboarding Completed</option>
+                          </select>
                         </td>
                         <td>
                           <span className={`badge ${emp.status === 'Active' ? 'badge-active' : 'badge-inactive'}`}>
@@ -611,7 +700,7 @@ export default function EmployeeRegister() {
           {error && <div className="alert alert-error"><ShieldAlert /><span>{error}</span></div>}
 
           {/* Steps Contents */}
-          <form onSubmit={viewMode === 'add' ? handleCreateEmployee : handleUpdateEmployee}>
+          <form onSubmit={onSubmitWizard}>
             
             {/* STEP 1: BASIC DETAILS */}
             {step === 1 && (
@@ -726,7 +815,9 @@ export default function EmployeeRegister() {
                   <label className="form-label">Designation</label>
                   <select className="form-control" value={formData.designation_id} onChange={(e) => setFormData({...formData, designation_id: e.target.value})}>
                     <option value="">Choose Designation</option>
-                    {designations.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    {designations
+                      .filter(d => !formData.department_id || String(d.department_id) === String(formData.department_id))
+                      .map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
                 </div>
                 <div className="form-group">

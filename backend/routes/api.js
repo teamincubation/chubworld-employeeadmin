@@ -100,10 +100,12 @@ router.get('/metadata/pincode/:pincode', authenticateToken, metadataController.f
 
 router.get('/metadata/departments', authenticateToken, metadataController.listDepartments);
 router.post('/metadata/departments', authenticateToken, requirePermission('role:manage'), metadataController.createDepartment);
+router.put('/metadata/departments/:id', authenticateToken, requirePermission('role:manage'), metadataController.updateDepartment);
 router.delete('/metadata/departments/:id', authenticateToken, requirePermission('role:manage'), metadataController.deleteDepartment);
 
 router.get('/metadata/designations', authenticateToken, metadataController.listDesignations);
 router.post('/metadata/designations', authenticateToken, requirePermission('role:manage'), metadataController.createDesignation);
+router.put('/metadata/designations/:id', authenticateToken, requirePermission('role:manage'), metadataController.updateDesignation);
 router.delete('/metadata/designations/:id', authenticateToken, requirePermission('role:manage'), metadataController.deleteDesignation);
 
 router.get('/metadata/work-locations', authenticateToken, metadataController.listWorkLocations);

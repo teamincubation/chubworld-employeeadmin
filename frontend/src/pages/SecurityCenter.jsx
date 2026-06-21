@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { 
   ShieldCheck, Lock, ToggleLeft, ToggleRight, Key, 
   MapPin, Settings, AlertTriangle, ShieldAlert, 
-  CheckCircle, Plus, Edit3, Trash2
+  CheckCircle, Plus, Edit3, Trash2, Building
 } from 'lucide-react';
 
 export default function SecurityCenter() {
@@ -14,6 +14,16 @@ export default function SecurityCenter() {
   const [users, setUsers] = useState([]);
   const [locations, setLocations] = useState([]);
   const [settings, setSettings] = useState({});
+  const [ipLocations, setIpLocations] = useState({});
+  const [departments, setDepartments] = useState([]);
+  const [designations, setDesignations] = useState([]);
+  const [selectedDeptFilter, setSelectedDeptFilter] = useState('');
+  
+  // Organization Modals
+  const [showDeptModal, setShowDeptModal] = useState(false);
+  const [deptForm, setDeptForm] = useState({ id: null, name: '' });
+  const [showDesigModal, setShowDesigModal] = useState(false);
+  const [desigForm, setDesigForm] = useState({ id: null, name: '', department_id: '' });
   
   // Tab control
   const [activeTab, setActiveTab] = useState('audits'); // 'audits', 'users', 'locations', 'settings'
@@ -41,6 +51,106 @@ export default function SecurityCenter() {
     fetchData();
   }, [activeTab]);
 
+  useEffect(() => {
+    const resolveIps = async () => {
+      const uniqueIps = [...new Set(audits.map(log => log.ip_address).filter(ip => ip && ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1'))];
+      const newLocs = { ...ipLocations };
+      let updated = false;
+      for (const ip of uniqueIps) {
+        if (!newLocs[ip]) {
+          try {
+            const res = await fetch(`https://freeipapi.com/api/json/${ip}`);
+            if (res.ok) {
+              const data = await res.json();
+              if (data.cityName && data.countryName) {
+                newLocs[ip] = `${data.cityName}, ${data.countryName}`;
+                updated = true;
+              } else {
+                newLocs[ip] = 'Unknown Location';
+              }
+            }
+          } catch (e) {
+            console.error('IP resolve error for ' + ip, e);
+          }
+        }
+      }
+      if (updated) {
+        setIpLocations(newLocs);
+      }
+    };
+    if (audits.length > 0) {
+      resolveIps();
+    }
+  }, [audits]);
+
+  const handleSaveDepartment = async (e) => {
+    e.preventDefault();
+    try {
+      if (deptForm.id) {
+        await request(`/metadata/departments/${deptForm.id}`, {
+          method: 'PUT',
+          body: { name: deptForm.name }
+        });
+        alert('Department updated.');
+      } else {
+        await request('/metadata/departments', {
+          method: 'POST',
+          body: { name: deptForm.name }
+        });
+        alert('Department created.');
+      }
+      setShowDeptModal(false);
+      setDeptForm({ id: null, name: '' });
+      fetchData();
+    } catch (err) {
+      alert(err.message || 'Error saving department.');
+    }
+  };
+
+  const handleDeleteDepartment = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this department? Aligned designations might also be affected.')) return;
+    try {
+      await request(`/metadata/departments/${id}`, { method: 'DELETE' });
+      fetchData();
+    } catch (err) {
+      alert(err.message || 'Cannot delete department. Employees are assigned to it.');
+    }
+  };
+
+  const handleSaveDesignation = async (e) => {
+    e.preventDefault();
+    try {
+      if (desigForm.id) {
+        await request(`/metadata/designations/${desigForm.id}`, {
+          method: 'PUT',
+          body: { name: desigForm.name, department_id: desigForm.department_id }
+        });
+        alert('Designation updated.');
+      } else {
+        await request('/metadata/designations', {
+          method: 'POST',
+          body: { name: desigForm.name, department_id: desigForm.department_id }
+        });
+        alert('Designation created.');
+      }
+      setShowDesigModal(false);
+      setDesigForm({ id: null, name: '', department_id: '' });
+      fetchData();
+    } catch (err) {
+      alert(err.message || 'Error saving designation.');
+    }
+  };
+
+  const handleDeleteDesignation = async (id) => {
+    if (!window.confirm('Delete this designation?')) return;
+    try {
+      await request(`/metadata/designations/${id}`, { method: 'DELETE' });
+      fetchData();
+    } catch (err) {
+      alert(err.message || 'Cannot delete designation. Employees are assigned to it.');
+    }
+  };
+
   const fetchData = async () => {
     setLoading(true);
     setError('');
@@ -54,6 +164,11 @@ export default function SecurityCenter() {
       } else if (activeTab === 'locations') {
         const list = await request('/metadata/work-locations');
         setLocations(list);
+      } else if (activeTab === 'organization') {
+        const depts = await request('/metadata/departments');
+        const desigs = await request('/metadata/designations');
+        setDepartments(depts);
+        setDesignations(desigs);
       } else if (activeTab === 'settings') {
         const list = await request('/security/settings');
         // Convert array to key-value object
@@ -169,6 +284,7 @@ export default function SecurityCenter() {
           { key: 'audits', name: 'Operational Audit logs', icon: ShieldCheck },
           { key: 'users', name: 'Login Credentials', icon: Lock },
           { key: 'locations', name: 'Geofence Boundaries', icon: MapPin },
+          { key: 'organization', name: 'Org Structure', icon: Building },
           { key: 'settings', name: 'System Parameters', icon: Settings }
         ].map(t => {
           const Icon = t.icon;
@@ -250,6 +366,13 @@ export default function SecurityCenter() {
                             <td>
                               <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                                 <div>IP: {log.ip_address}</div>
+                                {log.ip_address === '127.0.0.1' || log.ip_address === '::1' || log.ip_address === '::ffff:127.0.0.1' ? (
+                                  <div style={{ color: 'var(--chub-pink)', fontWeight: 600 }}>Localhost (Developer Session)</div>
+                                ) : (
+                                  <div style={{ color: 'var(--chub-purple)', fontWeight: 600 }}>
+                                    {ipLocations[log.ip_address] || 'Resolving location...'}
+                                  </div>
+                                )}
                                 <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '250px' }}>UA: {log.user_agent}</div>
                               </div>
                             </td>
@@ -392,6 +515,101 @@ export default function SecurityCenter() {
               </div>
             )}
 
+            {/* 3.5. DEPARTMENTS & DESIGNATIONS */}
+            {activeTab === 'organization' && (
+              <div>
+                <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap' }}>
+                  {/* Left Column: Departments list */}
+                  <div style={{ flex: 1, minWidth: '320px' }}>
+                    <div className="flex-between" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '16px' }}>
+                      <h3 style={{ fontSize: '18px', margin: 0, color: 'var(--chub-purple)' }}>Departments</h3>
+                      <button onClick={() => { setDeptForm({ id: null, name: '' }); setShowDeptModal(true); }} className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '13px' }}>
+                        <Plus size={14} /> Add Dept
+                      </button>
+                    </div>
+
+                    <div className="table-container">
+                      <table className="custom-table" style={{ fontSize: '13px' }}>
+                        <thead>
+                          <tr>
+                            <th>Department Name</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {departments.map((dept) => (
+                            <tr key={dept.id} style={{ backgroundColor: selectedDeptFilter === String(dept.id) ? 'rgba(216, 90, 166, 0.05)' : 'transparent' }}>
+                              <td style={{ fontWeight: 600, cursor: 'pointer', color: selectedDeptFilter === String(dept.id) ? 'var(--chub-pink)' : 'inherit' }} onClick={() => setSelectedDeptFilter(selectedDeptFilter === String(dept.id) ? '' : String(dept.id))}>
+                                {dept.name}
+                              </td>
+                              <td>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  <button onClick={() => { setDeptForm({ id: dept.id, name: dept.name }); setShowDeptModal(true); }} className="btn btn-secondary" style={{ padding: '4px 8px', border: 'none' }} title="Edit Department">
+                                    <Plus size={14} style={{ color: 'var(--chub-pink)' }} />
+                                  </button>
+                                  <button onClick={() => handleDeleteDepartment(dept.id)} className="btn btn-secondary" style={{ padding: '4px 8px', border: 'none' }} title="Delete Department">
+                                    <Trash2 size={14} style={{ color: 'var(--color-error)' }} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Designations list */}
+                  <div style={{ flex: 1.5, minWidth: '360px' }}>
+                    <div className="flex-between" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <h3 style={{ fontSize: '18px', margin: 0, color: 'var(--chub-purple)' }}>Designations</h3>
+                        <select className="form-control" style={{ padding: '4px 8px', fontSize: '12px', width: 'auto', height: 'auto', display: 'inline-block' }} value={selectedDeptFilter} onChange={(e) => setSelectedDeptFilter(e.target.value)}>
+                          <option value="">All Departments</option>
+                          {departments.map(d => <option key={d.id} value={String(d.id)}>{d.name}</option>)}
+                        </select>
+                      </div>
+                      <button onClick={() => { setDesigForm({ id: null, name: '', department_id: selectedDeptFilter || '' }); setShowDesigModal(true); }} className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '13px' }}>
+                        <Plus size={14} /> Add Designation
+                      </button>
+                    </div>
+
+                    <div className="table-container">
+                      <table className="custom-table" style={{ fontSize: '13px' }}>
+                        <thead>
+                          <tr>
+                            <th>Designation Name</th>
+                            <th>Aligned Department</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {designations
+                            .filter(desig => !selectedDeptFilter || String(desig.department_id) === selectedDeptFilter)
+                            .map((desig) => (
+                              <tr key={desig.id}>
+                                <td style={{ fontWeight: 600 }}>{desig.name}</td>
+                                <td><span className="badge badge-kyc-pending">{desig.department_name || 'Unassigned'}</span></td>
+                                <td>
+                                  <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button onClick={() => { setDesigForm({ id: desig.id, name: desig.name, department_id: desig.department_id || '' }); setShowDesigModal(true); }} className="btn btn-secondary" style={{ padding: '4px 8px', border: 'none' }} title="Edit Designation">
+                                      <Plus size={14} style={{ color: 'var(--chub-pink)' }} />
+                                    </button>
+                                    <button onClick={() => handleDeleteDesignation(desig.id)} className="btn btn-secondary" style={{ padding: '4px 8px', border: 'none' }} title="Delete Designation">
+                                      <Trash2 size={14} style={{ color: 'var(--color-error)' }} />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* 4. SYSTEM PARAMETERS */}
             {activeTab === 'settings' && (
               <div>
@@ -457,6 +675,16 @@ export default function SecurityCenter() {
                         onChange={(e) => setSettings({ ...settings, smtp_port: e.target.value })}
                       />
                     </div>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">SMTP Email Password</label>
+                    <input 
+                      type="password" 
+                      className="form-control"
+                      value={settings.smtp_pass || ''}
+                      onChange={(e) => setSettings({ ...settings, smtp_pass: e.target.value })}
+                      placeholder="SMTP Email account authentication key"
+                    />
                   </div>
 
                   <button type="submit" className="btn btn-primary" style={{ marginTop: '20px' }}>
@@ -576,6 +804,82 @@ export default function SecurityCenter() {
                 </button>
                 <button type="submit" className="btn btn-primary">
                   Save Location
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ADD / EDIT DEPARTMENT MODAL */}
+      {showDeptModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '380px' }}>
+            <h3 style={{ marginBottom: '20px' }}>
+              {deptForm.id ? 'Modify Department' : 'Create New Department'}
+            </h3>
+            <form onSubmit={handleSaveDepartment}>
+              <div className="form-group">
+                <label className="form-label">Department Name *</label>
+                <input 
+                  type="text" 
+                  className="form-control" 
+                  placeholder="e.g. Engineering"
+                  value={deptForm.name}
+                  onChange={(e) => setDeptForm({ ...deptForm, name: e.target.value })}
+                  required
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+                <button type="button" onClick={() => setShowDeptModal(false)} className="btn btn-secondary">
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Save Department
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ADD / EDIT DESIGNATION MODAL */}
+      {showDesigModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '400px' }}>
+            <h3 style={{ marginBottom: '20px' }}>
+              {desigForm.id ? 'Modify Designation' : 'Create New Designation'}
+            </h3>
+            <form onSubmit={handleSaveDesignation}>
+              <div className="form-group">
+                <label className="form-label">Designation Title *</label>
+                <input 
+                  type="text" 
+                  className="form-control" 
+                  placeholder="e.g. Senior developer"
+                  value={desigForm.name}
+                  onChange={(e) => setDesigForm({ ...desigForm, name: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Align to Department *</label>
+                <select 
+                  className="form-control" 
+                  value={desigForm.department_id}
+                  onChange={(e) => setDesigForm({ ...desigForm, department_id: e.target.value })}
+                  required
+                >
+                  <option value="">Select Department Alignment</option>
+                  {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </div>
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+                <button type="button" onClick={() => setShowDesigModal(false)} className="btn btn-secondary">
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Save Designation
                 </button>
               </div>
             </form>

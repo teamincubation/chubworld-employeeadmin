@@ -103,29 +103,81 @@ const metadataController = {
     }
   },
 
+  updateDepartment: async (req, res) => {
+    const { id } = req.params;
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ message: 'Department name is required.' });
+    try {
+      const { data: old } = await supabase.from('departments').select('*').eq('id', id);
+      const { error } = await supabase.from('departments').update({ name }).eq('id', id);
+      if (error) throw error;
+
+      await logAudit(req, 'UPDATE_DEPARTMENT', `departments/${id}`, old ? old[0] : null, { name });
+      res.json({ message: 'Department updated.' });
+    } catch (err) {
+      res.status(500).json({ message: 'Error updating department.' });
+    }
+  },
+
   // 2. Designations CRUD
   listDesignations: async (req, res) => {
     try {
-      const { data: list, error } = await supabase.from('designations').select('*').order('name', { ascending: true });
+      const { data: list, error } = await supabase
+        .from('designations')
+        .select(`
+          id, name, department_id,
+          departments(name)
+        `)
+        .order('name', { ascending: true });
       if (error) throw error;
-      res.json(list || []);
+      
+      const mapped = (list || []).map(item => ({
+        id: item.id,
+        name: item.name,
+        department_id: item.department_id,
+        department_name: item.departments ? item.departments.name : null
+      }));
+      res.json(mapped);
     } catch (err) {
       res.status(500).json({ message: 'Error retrieving designations.' });
     }
   },
 
   createDesignation: async (req, res) => {
-    const { name } = req.body;
+    const { name, department_id } = req.body;
     if (!name) return res.status(400).json({ message: 'Designation name is required.' });
 
     try {
-      const { data: result, error } = await supabase.from('designations').insert([{ name }]).select('id').single();
+      const { data: result, error } = await supabase.from('designations').insert([{ 
+        name, 
+        department_id: department_id ? parseInt(department_id) : null
+      }]).select('id').single();
       if (error) throw error;
 
-      await logAudit(req, 'CREATE_DESIGNATION', `designations/${result.id}`, null, { name });
+      await logAudit(req, 'CREATE_DESIGNATION', `designations/${result.id}`, null, { name, department_id });
       res.status(201).json({ message: 'Designation created.', id: result.id });
     } catch (err) {
       res.status(500).json({ message: 'Designation already exists or server error.' });
+    }
+  },
+
+  updateDesignation: async (req, res) => {
+    const { id } = req.params;
+    const { name, department_id } = req.body;
+    if (!name) return res.status(400).json({ message: 'Designation name is required.' });
+
+    try {
+      const { data: old } = await supabase.from('designations').select('*').eq('id', id);
+      const { error } = await supabase.from('designations').update({ 
+        name, 
+        department_id: department_id ? parseInt(department_id) : null
+      }).eq('id', id);
+      if (error) throw error;
+
+      await logAudit(req, 'UPDATE_DESIGNATION', `designations/${id}`, old ? old[0] : null, { name, department_id });
+      res.json({ message: 'Designation updated.' });
+    } catch (err) {
+      res.status(500).json({ message: 'Error updating designation.' });
     }
   },
 
