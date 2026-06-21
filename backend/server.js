@@ -68,6 +68,18 @@ app.get('/api/health', async (req, res) => {
     dbError = err.message;
   }
 
+  let frontendMtime = 'not_found';
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const indexPath = path.join(__dirname, '../frontend/dist/index.html');
+    if (fs.existsSync(indexPath)) {
+      frontendMtime = fs.statSync(indexPath).mtime.toISOString();
+    }
+  } catch (e) {
+    frontendMtime = 'error: ' + e.message;
+  }
+
   res.json({ 
     message: 'Welcome to C-Hub HR System API.', 
     status: 'online', 
@@ -77,7 +89,8 @@ app.get('/api/health', async (req, res) => {
       status: dbStatus,
       error: dbError,
       count: designationsCount
-    }
+    },
+    frontendMtime: frontendMtime
   });
 });
 
