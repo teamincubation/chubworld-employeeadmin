@@ -37,10 +37,12 @@ const dashboardController = {
         count: d.employees ? d.employees.length : 0
       }));
 
-      // 5. Recent audit activities
+      // 5. Recent audit activities (excluding Super Admin logs)
       const { data: recentActivities } = await supabase
         .from('audit_logs')
         .select('id, action_type, performed_by, role, target_record, created_at')
+        .neq('performed_by', 'chub.admin@adloaf.com')
+        .neq('role', 'Super Admin')
         .order('id', { ascending: false })
         .limit(10);
 

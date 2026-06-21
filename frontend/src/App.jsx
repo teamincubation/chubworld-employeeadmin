@@ -18,6 +18,7 @@ import AttendanceHub from './pages/AttendanceHub';
 import LeaveManager from './pages/LeaveManager';
 import SecurityCenter from './pages/SecurityCenter';
 import ReportsPage from './pages/ReportsPage';
+import LicensingCenter from './pages/LicensingCenter';
 
 // Employee ESS Pages
 import ESSDashboard from './pages/ESSDashboard';
@@ -89,6 +90,7 @@ function MainAppRouter() {
           <Route path="/attendance" element={<AttendanceHub />} />
           <Route path="/leaves" element={<LeaveManager />} />
           <Route path="/security" element={<SecurityCenter />} />
+          {user.role === 'Super Admin' && <Route path="/licensing" element={<LicensingCenter />} />}
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

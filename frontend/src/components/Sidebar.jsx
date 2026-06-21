@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, Clock, CalendarDays, 
   ShieldCheck, FileSpreadsheet, User, KeyRound, 
   ChevronLeft, ChevronRight, LogOut, ClipboardList,
-  Building, MapPin
+  Building, MapPin, ShieldAlert
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -86,6 +86,10 @@ export default function Sidebar() {
     { name: 'Reports', path: '/reports', icon: FileSpreadsheet, key: 'reports' }
   ];
 
+  if (user?.role === 'Super Admin') {
+    adminItems.push({ name: 'Licensing & Sharing', path: '/licensing', icon: ShieldAlert, key: 'licensing' });
+  }
+
   // Employee ESS Sidebar Items
   const employeeItems = [
     { name: 'ESS Dashboard', path: '/', icon: LayoutDashboard },
@@ -97,7 +101,7 @@ export default function Sidebar() {
   ];
 
   const filteredAdminItems = allowedModules 
-    ? adminItems.filter(item => allowedModules.includes(item.key))
+    ? adminItems.filter(item => allowedModules.includes(item.key) || item.key === 'licensing')
     : adminItems;
 
   const menuItems = isAdmin ? filteredAdminItems : employeeItems;
