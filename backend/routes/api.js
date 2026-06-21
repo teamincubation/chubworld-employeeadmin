@@ -207,46 +207,47 @@ router.get('/documents/download/:filename', authenticateToken, async (req, res) 
   }
 });
 
-// Debug route to test direct Postgres connections from Hostinger
-router.get('/temp-db-test', async (req, res) => {
+// Debug route to initialize Supabase database tables and seed data
+router.get('/temp-run-migrations', async (req, res) => {
   const { Client } = require('pg');
-  const hosts = [
-    'db.mcolsszozjnveoommnuk.supabase.co',
-    'aws-0-ap-southeast-1.pooler.supabase.com'
-  ];
-  const passwords = [
-    'ChubAdmin$2027#',
-    'SuperAdmin@123',
-    'ChubAdmin$2026#',
-    'AdloafDevs$2027#',
-    'ChubDevs$2027#',
-    'chubworld'
-  ];
+  const fs = require('fs');
+  const path = require('path');
 
-  const results = [];
+  const client = new Client({
+    host: 'db.mcolsszozjnveoommnuk.supabase.co',
+    port: 5432,
+    database: 'postgres',
+    user: 'postgres',
+    password: 'ChubAdmin$2027#',
+    ssl: { rejectUnauthorized: false }
+  });
 
-  for (const host of hosts) {
-    for (const password of passwords) {
-      const client = new Client({
-        host: host,
-        port: 5432,
-        database: 'postgres',
-        user: 'postgres',
-        password: password,
-        ssl: { rejectUnauthorized: false }
-      });
+  try {
+    const schemaPath = path.join(__dirname, '../../database/schema.sql');
+    const seedPath = path.join(__dirname, '../../database/seed.sql');
 
-      try {
-        await client.connect();
-        results.push({ host, password, status: 'SUCCESS' });
-        await client.end();
-      } catch (err) {
-        results.push({ host, password, status: 'FAILED', error: err.message });
-      }
+    console.log('Reading migration files...');
+    const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+    const seedSql = fs.readFileSync(seedPath, 'utf8');
+
+    console.log('Connecting to PostgreSQL database...');
+    await client.connect();
+
+    console.log('Executing schema.sql...');
+    await client.query(schemaSql);
+
+    console.log('Executing seed.sql...');
+    await client.query(seedSql);
+
+    await client.end();
+    res.json({ status: 'SUCCESS', message: 'Database schema and seed data applied successfully!' });
+  } catch (err) {
+    if (client) {
+      try { await client.end(); } catch (e) {}
     }
+    console.error('Migration failed:', err.message);
+    res.status(500).json({ status: 'FAILED', error: err.message, stack: err.stack });
   }
-
-  res.json({ results });
 });
 
 module.exports = router;
