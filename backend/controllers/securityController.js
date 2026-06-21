@@ -72,21 +72,26 @@ const securityController = {
         .select(`
           id, email, status, onboarding_completed,
           roles(name),
-          employees(employee_id, full_name)
+          employees(employee_id, full_name, deleted_at)
         `)
         .order('id', { ascending: true });
 
       if (error) throw error;
 
-      const mappedUsers = (users || []).map(u => ({
-        id: u.id,
-        email: u.email,
-        status: u.status,
-        onboarding_completed: u.onboarding_completed,
-        role_name: u.roles ? u.roles.name : null,
-        employee_id: (u.employees && u.employees.length > 0) ? u.employees[0].employee_id : null,
-        full_name: (u.employees && u.employees.length > 0) ? u.employees[0].full_name : null
-      }));
+      const mappedUsers = (users || []).map(u => {
+        const emp = (u.employees && u.employees.length > 0) ? u.employees[0] : null;
+        return {
+          id: u.id,
+          email: u.email,
+          status: u.status,
+          onboarding_completed: u.onboarding_completed,
+          role_name: u.roles ? u.roles.name : null,
+          employee_id: emp ? emp.employee_id : null,
+          full_name: emp ? emp.full_name : null,
+          deleted_at: emp ? emp.deleted_at : null,
+          is_soft_deleted: !!(emp && emp.deleted_at)
+        };
+      });
 
       res.json(mappedUsers);
     } catch (err) {
@@ -155,6 +160,95 @@ const securityController = {
     } catch (err) {
       console.error('AdminResetPassword Error:', err.message);
       res.status(500).json({ message: 'Error resetting password.' });
+    }
+  },
+
+  // Hard delete a user account and all their related tables data/files
+  hardDeleteUser: async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      // 1. Get user details
+      const { data: userRecord, error: uErr } = await supabase
+        .from('users')
+        .select('email')
+        .eq('id', userId)
+        .single();
+
+      if (uErr || !userRecord) {
+        return res.status(404).json({ message: 'User account not found.' });
+      }
+
+      // 2. Find associated employee
+      const { data: employeeRecord } = await supabase
+        .from('employees')
+        .select('id, photo_path')
+        .eq('user_id', userId)
+        .single();
+
+      // 3. If employee exists, clean up documents and delete employee record
+      if (employeeRecord) {
+        const empId = employeeRecord.id;
+
+        // Fetch document file paths to delete files from disk
+        const { data: docs } = await supabase
+          .from('employee_documents')
+          .select('file_path')
+          .eq('employee_id', empId);
+
+        const fs = require('fs');
+        const path = require('path');
+
+        // Delete documents from disk
+        if (docs && docs.length > 0) {
+          docs.forEach(doc => {
+            if (doc.file_path) {
+              const filePath = path.resolve(doc.file_path);
+              if (fs.existsSync(filePath)) {
+                try {
+                  fs.unlinkSync(filePath);
+                } catch (e) {
+                  console.error('Failed to delete file from disk:', filePath, e.message);
+                }
+              }
+            }
+          });
+        }
+
+        // Delete photo from disk
+        if (employeeRecord.photo_path) {
+          const photoPath = path.resolve(employeeRecord.photo_path);
+          if (fs.existsSync(photoPath)) {
+            try {
+              fs.unlinkSync(photoPath);
+            } catch (e) {
+              console.error('Failed to delete photo from disk:', photoPath, e.message);
+            }
+          }
+        }
+
+        // Delete employee record (cascades to kyc, documents, shifts, attendance, corrections, leaves)
+        const { error: empDelErr } = await supabase.from('employees').delete().eq('id', empId);
+        if (empDelErr) throw empDelErr;
+      }
+
+      // 4. Delete login history
+      await supabase.from('login_history').delete().eq('user_id', userId);
+
+      // 5. Delete user record
+      const { error: userDelErr } = await supabase.from('users').delete().eq('id', userId);
+      if (userDelErr) throw userDelErr;
+
+      // 6. Log hard delete in security logs
+      await logAudit(req, 'HARD_DELETE_USER_DATA', `users/${userId}`, null, { 
+        email: userRecord.email, 
+        hadEmployee: !!employeeRecord 
+      });
+
+      res.json({ message: `User and all associated profile, attendance, and documents data purged successfully.` });
+    } catch (err) {
+      console.error('HardDeleteUser Error:', err.message);
+      res.status(500).json({ message: 'Error performing hard delete on user data.' });
     }
   },
 

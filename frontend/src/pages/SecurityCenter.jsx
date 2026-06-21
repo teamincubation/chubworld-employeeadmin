@@ -219,6 +219,29 @@ export default function SecurityCenter() {
     }
   };
 
+  const handleHardDeleteUser = async (id, email) => {
+    const confirmation1 = window.confirm(`WARNING: You are about to HARD DELETE user ${email}.\nThis will permanently purge this user account and ALL associated records (including employee profile, KYC data, upload documents, geofence assignments, and attendance logs) from the system database.\nThis action is compliance-logged and CANNOT BE UNDONE.\n\nAre you sure you want to proceed?`);
+    if (!confirmation1) return;
+
+    const confirmation2 = window.prompt(`To confirm hard deletion, please type the user's email address (${email}) below:`);
+    if (confirmation2 !== email) {
+      alert('Email mismatch. Action aborted.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await request(`/security/users/${id}`, {
+        method: 'DELETE'
+      });
+      alert(`User ${email} and all related records have been completely purged from the system.`);
+      fetchData();
+    } catch (err) {
+      alert(err.message || 'Error purging user data.');
+      setLoading(false);
+    }
+  };
+
   const handleSaveLocation = async (e) => {
     e.preventDefault();
     try {
@@ -404,12 +427,20 @@ export default function SecurityCenter() {
                       </tr>
                     </thead>
                     <tbody>
-                      {users.map((usr) => (
+                       {users.map((usr) => (
                         <tr key={usr.id}>
                           <td style={{ fontWeight: 600 }}>{usr.email}</td>
                           <td>
                             {usr.full_name ? (
-                              <div>{usr.full_name} <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>({usr.employee_id})</span></div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                <span>{usr.full_name}</span>
+                                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>({usr.employee_id})</span>
+                                {usr.is_soft_deleted && (
+                                  <span className="badge badge-inactive" style={{ backgroundColor: 'rgba(229, 57, 53, 0.1)', color: '#e53935', fontSize: '10px', padding: '2px 6px', fontWeight: 'bold' }}>
+                                    Soft Deleted
+                                  </span>
+                                )}
+                              </div>
                             ) : (
                               <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>System Account</span>
                             )}
@@ -435,6 +466,14 @@ export default function SecurityCenter() {
                                 style={{ padding: '6px 12px', fontSize: '12px' }}
                               >
                                 <Key size={12} /> Force Reset
+                              </button>
+                              <button 
+                                onClick={() => handleHardDeleteUser(usr.id, usr.email)}
+                                className="btn btn-secondary"
+                                style={{ padding: '6px 12px', fontSize: '12px', borderColor: 'var(--color-error)', color: 'var(--color-error)' }}
+                                title="Purge all user database records and files"
+                              >
+                                <Trash2 size={12} /> Purge All
                               </button>
                             </div>
                           </td>

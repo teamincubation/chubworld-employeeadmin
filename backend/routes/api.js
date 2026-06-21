@@ -153,6 +153,8 @@ router.get('/security/alerts', authenticateToken, requirePermission('audit:view'
 router.get('/security/users', authenticateToken, requirePermission('role:manage'), securityController.listUsers);
 router.post('/security/users/:userId/status', authenticateToken, requirePermission('role:manage'), securityController.toggleUserStatus);
 router.post('/security/users/:userId/reset-password', authenticateToken, requirePermission('role:manage'), securityController.adminResetPassword);
+router.delete('/security/users/:userId', authenticateToken, requirePermission('role:manage'), securityController.hardDeleteUser);
+
 
 router.get('/security/roles', authenticateToken, requirePermission('role:manage'), securityController.listRoles);
 router.get('/security/permissions', authenticateToken, requirePermission('role:manage'), securityController.listPermissions);

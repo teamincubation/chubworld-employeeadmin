@@ -56,10 +56,19 @@ export default function EmployeeRegister() {
   const [photoFile, setPhotoFile] = useState(null);
   const [documentFiles, setDocumentFiles] = useState([]); // [{ type: '', file: null }]
 
-  // KYC reveal modal state
   const [showKycReveal, setShowKycReveal] = useState(false);
   const [decryptedKyc, setDecryptedKyc] = useState(null);
   const [kycLoading, setKycLoading] = useState(false);
+
+  const [submitDisabled, setSubmitDisabled] = useState(false);
+
+  useEffect(() => {
+    if (step === 5) {
+      setSubmitDisabled(true);
+      const timer = setTimeout(() => setSubmitDisabled(false), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [step]);
 
   useEffect(() => {
     fetchListData();
@@ -680,7 +689,12 @@ export default function EmployeeRegister() {
               { num: 4, name: 'KYC & Bank' },
               { num: 5, name: 'Documents' }
             ].map(s => (
-              <div key={s.num} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, flex: 1 }}>
+              <div 
+                key={s.num} 
+                onClick={() => setStep(s.num)}
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, flex: 1, cursor: 'pointer' }}
+                title={`Go to Step ${s.num}: ${s.name}`}
+              >
                 <div style={{
                   width: '30px', height: '30px', borderRadius: '50%',
                   backgroundColor: step === s.num ? 'var(--chub-pink)' : step > s.num ? 'var(--chub-purple)' : 'var(--bg-primary)',
@@ -951,7 +965,7 @@ export default function EmployeeRegister() {
               <button 
                 type="button" 
                 className="btn btn-secondary" 
-                onClick={() => setStep(step - 1)} 
+                onClick={(e) => { e.preventDefault(); setStep(step - 1); }} 
                 disabled={step === 1}
               >
                 <ArrowLeft size={14} /> Back
@@ -961,13 +975,18 @@ export default function EmployeeRegister() {
                 <button 
                   type="button" 
                   className="btn btn-primary" 
-                  onClick={() => setStep(step + 1)}
+                  onClick={(e) => { e.preventDefault(); setStep(step + 1); }}
                 >
                   Continue <ArrowRight size={14} />
                 </button>
               ) : (
-                <button type="submit" className="btn btn-primary" style={{ background: 'var(--success-gradient)' }}>
-                  Submit Profiles Setup
+                <button 
+                  type="submit" 
+                  className="btn btn-primary" 
+                  style={{ background: 'var(--success-gradient)' }}
+                  disabled={submitDisabled}
+                >
+                  {submitDisabled ? 'Preparing...' : 'Submit Profiles Setup'}
                 </button>
               )}
             </div>

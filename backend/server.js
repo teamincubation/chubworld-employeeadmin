@@ -44,53 +44,12 @@ app.use('/api/auth/forgot-password', authLimiter);
 app.use('/api', apiRouter);
 
 // Health check route
-app.get('/api/health', async (req, res) => {
-  let dbStatus = 'unknown';
-  let dbError = null;
-  let designationsCount = 0;
-  try {
-    const supabase = require('./config/db');
-    const { data, error } = await supabase
-      .from('designations')
-      .select(`
-        id, name, department_id,
-        departments(name)
-      `);
-    if (error) {
-      dbStatus = 'error';
-      dbError = error.message || error;
-    } else {
-      dbStatus = 'connected';
-      designationsCount = data ? data.length : 0;
-    }
-  } catch (err) {
-    dbStatus = 'crash';
-    dbError = err.message;
-  }
-
-  let frontendMtime = 'not_found';
-  try {
-    const fs = require('fs');
-    const path = require('path');
-    const indexPath = path.join(__dirname, '../frontend/dist/index.html');
-    if (fs.existsSync(indexPath)) {
-      frontendMtime = fs.statSync(indexPath).mtime.toISOString();
-    }
-  } catch (e) {
-    frontendMtime = 'error: ' + e.message;
-  }
-
+// Health check route
+app.get('/api/health', (req, res) => {
   res.json({ 
     message: 'Welcome to C-Hub HR System API.', 
     status: 'online', 
-    timezone: 'Asia/Kolkata (IST)',
-    database: {
-      url: process.env.SUPABASE_URL || 'not_configured',
-      status: dbStatus,
-      error: dbError,
-      count: designationsCount
-    },
-    frontendMtime: frontendMtime
+    timezone: 'Asia/Kolkata (IST)' 
   });
 });
 
