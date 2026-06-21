@@ -207,20 +207,43 @@ router.get('/documents/download/:filename', authenticateToken, async (req, res) 
   }
 });
 
-// Debug route to initialize Supabase database tables and seed data via pooler
+// Debug route to initialize Supabase database tables and seed data via pooler with retries
 router.get('/temp-run-migrations', async (req, res) => {
   const { Client } = require('pg');
   const fs = require('fs');
   const path = require('path');
 
-  const client = new Client({
-    host: 'aws-0-ap-southeast-1.pooler.supabase.com',
-    port: 6543,
-    database: 'postgres',
-    user: 'postgres.mcolsszozjnveoommnuk',
-    password: 'Cw@adloaf#root$Admin',
-    ssl: { rejectUnauthorized: false }
-  });
+  const ports = [6543, 5432];
+  let client;
+  let connected = false;
+  let lastError;
+
+  for (const port of ports) {
+    console.log(`Trying to connect to pooler on port ${port}...`);
+    client = new Client({
+      host: 'aws-0-ap-southeast-1.pooler.supabase.com',
+      port: port,
+      database: 'postgres',
+      user: 'postgres.mcolsszozjnveoommnuk',
+      password: 'Cw@adloaf#root$Admin',
+      ssl: { rejectUnauthorized: false }
+    });
+
+    try {
+      await client.connect();
+      connected = true;
+      console.log(`Connected successfully on port ${port}!`);
+      break;
+    } catch (err) {
+      console.error(`Connection failed on port ${port}:`, err.message);
+      lastError = err;
+      try { await client.end(); } catch (e) {}
+    }
+  }
+
+  if (!connected) {
+    return res.status(500).json({ status: 'FAILED', error: lastError.message, stack: lastError.stack });
+  }
 
   try {
     const schemaPath = path.join(__dirname, '../../database/schema.sql');
@@ -229,9 +252,6 @@ router.get('/temp-run-migrations', async (req, res) => {
     console.log('Reading migration files...');
     const schemaSql = fs.readFileSync(schemaPath, 'utf8');
     const seedSql = fs.readFileSync(seedPath, 'utf8');
-
-    console.log('Connecting to PostgreSQL pooler database...');
-    await client.connect();
 
     console.log('Executing schema.sql...');
     await client.query(schemaSql);
@@ -245,7 +265,7 @@ router.get('/temp-run-migrations', async (req, res) => {
     if (client) {
       try { await client.end(); } catch (e) {}
     }
-    console.error('Migration failed:', err.message);
+    console.error('Migration execution failed:', err.message);
     res.status(500).json({ status: 'FAILED', error: err.message, stack: err.stack });
   }
 });
