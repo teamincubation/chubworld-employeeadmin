@@ -207,4 +207,36 @@ router.get('/documents/download/:filename', authenticateToken, async (req, res) 
   }
 });
 
+// Debug route to test connection with clipboard password candidate
+router.get('/temp-db-test-clipboard', async (req, res) => {
+  const { Client } = require('pg');
+  const passwords = [
+    'Cw@adloaf#root$Admin',
+    'ChubAdmin$2027#',
+    'SuperAdmin@123'
+  ];
+
+  const results = [];
+  for (const password of passwords) {
+    const client = new Client({
+      host: 'db.mcolsszozjnveoommnuk.supabase.co',
+      port: 5432,
+      database: 'postgres',
+      user: 'postgres',
+      password: password,
+      ssl: { rejectUnauthorized: false }
+    });
+
+    try {
+      await client.connect();
+      results.push({ password, status: 'SUCCESS' });
+      await client.end();
+    } catch (err) {
+      results.push({ password, status: 'FAILED', error: err.message });
+    }
+  }
+
+  res.json({ results });
+});
+
 module.exports = router;
