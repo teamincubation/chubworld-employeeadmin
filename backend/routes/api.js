@@ -214,8 +214,8 @@ router.get('/temp-run-migrations', async (req, res) => {
   const path = require('path');
 
   const targets = [
-    { host: 'db.mcolsszozjnveoommnuk.supabase.co', port: 5432, user: 'postgres' },
-    { host: 'aws-0-ap-southeast-1.pooler.supabase.com', port: 6543, user: 'postgres.mcolsszozjnveoommnuk' }
+    { host: 'db.mcolsszojnveoommnuk.supabase.co', port: 5432, user: 'postgres' },
+    { host: 'aws-0-ap-southeast-1.pooler.supabase.com', port: 6543, user: 'postgres.mcolsszojnveoommnuk' }
   ];
 
   let client;
