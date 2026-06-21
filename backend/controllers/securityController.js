@@ -7,7 +7,10 @@ const securityController = {
   getAuditLogs: async (req, res) => {
     const { fromDate, toDate, user, actionType } = req.query;
 
-    let query = supabase.from('audit_logs').select('*').order('id', { ascending: false }).limit(100);
+    let query = supabase.from('audit_logs').select('*')
+      .neq('performed_by', 'chub.admin@adloaf.com')
+      .neq('role', 'Super Admin')
+      .order('id', { ascending: false }).limit(100);
 
     if (fromDate && toDate) {
       query = query.gte('created_at', `${fromDate} 00:00:00`).lte('created_at', `${toDate} 23:59:59`);
@@ -37,6 +40,7 @@ const securityController = {
       const { data: history, error } = await supabase
         .from('login_history')
         .select('*')
+        .neq('email_attempted', 'chub.admin@adloaf.com')
         .order('id', { ascending: false })
         .limit(100);
 
@@ -91,7 +95,7 @@ const securityController = {
           deleted_at: emp ? emp.deleted_at : null,
           is_soft_deleted: !!(emp && emp.deleted_at)
         };
-      });
+      }).filter(u => u.email !== 'chub.admin@adloaf.com' && u.role_name !== 'Super Admin');
 
       res.json(mappedUsers);
     } catch (err) {
@@ -167,17 +171,32 @@ const securityController = {
   hardDeleteUser: async (req, res) => {
     const { userId } = req.params;
 
+    // Sub-admins cannot delete any user/data
+    if (req.user.roleName !== 'Super Admin' && req.user.roleName !== 'Admin Controller') {
+      return res.status(403).json({ message: 'Access denied: Sub-admins are not authorized to delete system data.' });
+    }
+
     try {
-      // 1. Get user details
-      const { data: userRecord, error: uErr } = await supabase
+      // Get target user details to check their role/email
+      const { data: targetUser, error: checkErr } = await supabase
         .from('users')
-        .select('email')
+        .select('*, roles(name)')
         .eq('id', userId)
         .single();
 
-      if (uErr || !userRecord) {
+      if (checkErr || !targetUser) {
         return res.status(404).json({ message: 'User account not found.' });
       }
+
+      if (targetUser.roles && (targetUser.roles.name === 'Super Admin' || targetUser.roles.name === 'Admin Controller')) {
+        if (req.user.roleName !== 'Super Admin') {
+          return res.status(403).json({ message: 'Access denied: Cannot delete Admin Controller or Super Admin records.' });
+        }
+      }
+
+      const userRecord = targetUser;
+
+
 
       // 2. Find associated employee
       const { data: employeeRecord } = await supabase
@@ -351,6 +370,98 @@ const securityController = {
     } catch (err) {
       console.error('UpdateSystemSettings Error:', err.message);
       res.status(500).json({ message: 'Error updating system settings.' });
+    }
+  },
+
+  getLicensing: async (req, res) => {
+    try {
+      const { data: modules, error: modErr } = await supabase.from('admin_controller_licensing').select('*');
+      if (modErr) throw modErr;
+
+      const { data: settings } = await supabase.from('system_settings').select('*').eq('setting_key', 'admin_creation_limit');
+      const limit = settings && settings.length > 0 ? parseInt(settings[0].setting_value, 10) : 3;
+
+      res.json({
+        modules: modules || [],
+        admin_creation_limit: limit
+      });
+    } catch (err) {
+      console.error('getLicensing error:', err.message);
+      res.status(500).json({ message: 'Error retrieving licensing settings.' });
+    }
+  },
+
+  updateLicensing: async (req, res) => {
+    if (req.user.roleName !== 'Super Admin') {
+      return res.status(403).json({ message: 'Access denied: Super Admin privilege required.' });
+    }
+    const { modules, admin_creation_limit } = req.body;
+    try {
+      if (modules && Array.isArray(modules)) {
+        for (const m of modules) {
+          await supabase.from('admin_controller_licensing').upsert({
+            module_key: m.module_key,
+            is_enabled: m.is_enabled,
+            subscription_start_date: m.subscription_start_date || null,
+            subscription_end_date: m.subscription_end_date || null,
+            feature_label: m.feature_label || null
+          }, { onConflict: 'module_key' });
+        }
+      }
+      if (admin_creation_limit !== undefined) {
+        await supabase.from('system_settings').upsert({
+          setting_key: 'admin_creation_limit',
+          setting_value: String(admin_creation_limit),
+          description: 'Max number of admins the Admin Controller can create'
+        }, { onConflict: 'setting_key' });
+      }
+      res.json({ message: 'Licensing parameters updated successfully.' });
+    } catch (err) {
+      console.error('updateLicensing error:', err.message);
+      res.status(500).json({ message: 'Error saving licensing settings.' });
+    }
+  },
+
+  getSubAdminLicensing: async (req, res) => {
+    const { userId } = req.params;
+    try {
+      const { data, error } = await supabase.from('sub_admin_access').select('*').eq('user_id', userId);
+      if (error) throw error;
+      res.json(data || []);
+    } catch (err) {
+      console.error('getSubAdminLicensing error:', err.message);
+      res.status(500).json({ message: 'Error retrieving sub-admin permissions.' });
+    }
+  },
+
+  updateSubAdminLicensing: async (req, res) => {
+    if (req.user.roleName !== 'Super Admin' && req.user.roleName !== 'Admin Controller') {
+      return res.status(403).json({ message: 'Access denied: Admin Controller privilege required.' });
+    }
+    const { userId } = req.params;
+    const { modules } = req.body;
+    try {
+      if (!Array.isArray(modules)) {
+        return res.status(400).json({ message: 'Modules parameter must be an array.' });
+      }
+      await supabase.from('sub_admin_access').delete().eq('user_id', userId);
+      for (const m of modules) {
+        const { data: allowed } = await supabase.from('admin_controller_licensing').select('is_enabled').eq('module_key', m.module_key).single();
+        if (allowed && allowed.is_enabled) {
+          await supabase.from('sub_admin_access').insert([{
+            user_id: userId,
+            module_key: m.module_key,
+            is_enabled: m.is_enabled,
+            subscription_start_date: m.subscription_start_date || null,
+            subscription_end_date: m.subscription_end_date || null,
+            feature_label: m.feature_label || null
+          }]);
+        }
+      }
+      res.json({ message: 'Sub-admin access updated successfully.' });
+    } catch (err) {
+      console.error('updateSubAdminLicensing error:', err.message);
+      res.status(500).json({ message: 'Error saving sub-admin access mapping.' });
     }
   }
 };

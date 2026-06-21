@@ -14,7 +14,7 @@ const employeeController = {
       dob, gender, blood_group, marital_status, nationality, citizenship_status,
       emergency_contact_name, emergency_contact_number, alt_mobile, alt_email,
       reporting_manager_id, work_location_id, employment_type, joining_salary,
-      probation_period_days, confirmation_date, onboarding_status,
+      probation_period_days, confirmation_date, onboarding_status, login_password,
       // KYC fields
       aadhaar_number, pan_number, bank_account_number, bank_name, bank_ifsc, upi_id
     } = req.body;
@@ -69,7 +69,7 @@ const employeeController = {
 
       // If onboarding status is Completed/Approved, check if we need to create login user credentials
       if (onboarding_status === 'Approved' || onboarding_status === 'Onboarding Completed') {
-        await employeeController.autoCreateUserAccount(newEmployeeId, email, full_name);
+        await employeeController.autoCreateUserAccount(newEmployeeId, email, full_name, login_password);
       }
 
       // Log Audit Trail
@@ -83,16 +83,25 @@ const employeeController = {
   },
 
   // Helper to create user account upon onboarding approval
-  autoCreateUserAccount: async (employeeId, email, name) => {
+  autoCreateUserAccount: async (employeeId, email, name, customPassword) => {
     try {
       const { data: existingUser } = await supabase.from('users').select('id').eq('email', email);
-      if (existingUser && existingUser.length > 0) return;
-
-      // Generate default hashed password
+      
       const bcrypt = require('bcryptjs');
-      const defaultPassword = 'CHubEmp@2026';
+      const defaultPassword = customPassword || 'CHubEmp@2026';
       const salt = await bcrypt.genSalt(10);
       const passHash = await bcrypt.hash(defaultPassword, salt);
+
+      if (existingUser && existingUser.length > 0) {
+        // If user already exists, update password if customPassword was provided
+        if (customPassword) {
+          await supabase.from('users').update({ password_hash: passHash }).eq('id', existingUser[0].id);
+          console.log(`User password updated for employee ID ${employeeId}.`);
+          // Dispatch SMTP Email Notification
+          await employeeController.sendOnboardingEmail(email, name, defaultPassword);
+        }
+        return;
+      }
 
       // Default role is Employee (ID 6)
       const { data: userResult, error: userErr } = await supabase
@@ -118,9 +127,109 @@ const employeeController = {
         }
       }
 
-      console.log(`Auto User created for employee ID ${employeeId}. Account email: ${email}. Temporary password: ${defaultPassword}`);
+      console.log(`Auto User created for employee ID ${employeeId}. Account email: ${email}. Password: ${defaultPassword}`);
+      
+      // Dispatch SMTP Email Notification
+      await employeeController.sendOnboardingEmail(email, name, defaultPassword);
     } catch (err) {
       console.error('Auto user registration failed:', err.message);
+    }
+  },
+
+  // Onboarding Email Dispatcher
+  sendOnboardingEmail: async (email, name, password) => {
+    const nodemailer = require('nodemailer');
+    try {
+      // Fetch SMTP settings from system_settings
+      const { data: dbSettings } = await supabase.from('system_settings').select('*');
+      const settingsMap = {};
+      (dbSettings || []).forEach(s => { settingsMap[s.setting_key] = s.setting_value; });
+
+      const smtpHost = settingsMap.smtp_host || process.env.SMTP_HOST || 'smtp.hostinger.com';
+      const smtpPort = settingsMap.smtp_port || process.env.SMTP_PORT || '465';
+      const smtpUser = settingsMap.smtp_user || process.env.SMTP_USER;
+      const smtpPass = settingsMap.smtp_pass || process.env.SMTP_PASS;
+
+      if (!smtpUser || !smtpPass) {
+        console.log(`[SMTP] Skipped sending onboarding email because credentials are not configured. Email: ${email}`);
+        return;
+      }
+
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: parseInt(smtpPort, 10),
+        secure: smtpPort === '465',
+        auth: {
+          user: smtpUser,
+          pass: smtpPass
+        },
+        tls: {
+          rejectUnauthorized: false
+        }
+      });
+
+      const mailOptions = {
+        from: `"C-Hub HR Operations" <${smtpUser}>`,
+        to: email,
+        subject: 'Welcome to C-Hub! Your Employee Portal Credentials',
+        html: `
+          <div style="font-family: 'Poppins', 'Segoe UI', Arial, sans-serif; background-color: #f7f9fc; padding: 40px 20px; color: #333333;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.05); border: 1px solid #eef2f6;">
+              <!-- Header -->
+              <div style="background: linear-gradient(135deg, #6a1b9a 0%, #e91e63 100%); padding: 40px; text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700; letter-spacing: 0.5px;">Welcome to C-Hub!</h1>
+                <p style="color: rgba(255,255,255,0.85); margin: 8px 0 0 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1.5px;">Creating Wow World</p>
+              </div>
+              
+              <!-- Body -->
+              <div style="padding: 40px 30px;">
+                <p style="font-size: 16px; line-height: 1.6; margin-top: 0;">Hello <strong>\${name}</strong>,</p>
+                <p style="font-size: 15px; line-height: 1.6; color: #555555;">
+                  Your employee profile has been set up successfully by the administrator. You can now access your C-Hub Employee Self-Service (ESS) Portal to clock in, request leaves, view reports, and more.
+                </p>
+                
+                <div style="background-color: #f8f4f9; border-left: 4px solid #e91e63; padding: 20px; border-radius: 8px; margin: 30px 0;">
+                  <h3 style="margin-top: 0; color: #6a1b9a; font-size: 15px; text-transform: uppercase; letter-spacing: 0.5px;">Your Portal Credentials</h3>
+                  <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                    <tr>
+                      <td style="padding: 6px 0; color: #777777; width: 100px;"><strong>Portal URL:</strong></td>
+                      <td style="padding: 6px 0; color: #333333;"><a href="https://chubworld.adloaf.com" style="color: #e91e63; text-decoration: none; font-weight: 600;">chubworld.adloaf.com</a></td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 0; color: #777777;"><strong>Email ID:</strong></td>
+                      <td style="padding: 6px 0; color: #333333; font-family: monospace; font-size: 15px;"><strong>\${email}</strong></td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 0; color: #777777;"><strong>Password:</strong></td>
+                      <td style="padding: 6px 0; color: #333333; font-family: monospace; font-size: 15px;"><strong>\${password}</strong></td>
+                    </tr>
+                  </table>
+                </div>
+
+                <div style="text-align: center; margin: 35px 0;">
+                  <a href="https://chubworld.adloaf.com" style="background: linear-gradient(135deg, #e91e63 0%, #6a1b9a 100%); color: #ffffff; padding: 14px 30px; text-decoration: none; border-radius: 30px; font-weight: bold; font-size: 15px; display: inline-block; box-shadow: 0 4px 15px rgba(233, 30, 99, 0.3);">
+                    Employee Portal Login
+                  </a>
+                </div>
+
+                <p style="font-size: 13px; line-height: 1.6; color: #888888; background-color: #fafafa; padding: 12px; border-radius: 6px; text-align: center;">
+                  🔒 For security purposes, we recommend that you change your password after logging in for the first time.
+                </p>
+              </div>
+
+              <!-- Footer -->
+              <div style="background-color: #f7f9fc; padding: 24px; text-align: center; border-top: 1px solid #eef2f6;">
+                <p style="margin: 0; font-size: 12px; color: #9e9e9e;">C-Hub HR Systems & Administrative Portal</p>
+              </div>
+            </div>
+          </div>
+        `
+      };
+
+      await transporter.sendMail(mailOptions);
+      console.log(`[SMTP] Onboarding email successfully dispatched to ${email}`);
+    } catch (err) {
+      console.error('[SMTP] Onboarding email dispatch failed:', err.message);
     }
   },
 
@@ -309,7 +418,7 @@ const employeeController = {
       dob, gender, blood_group, marital_status, nationality, citizenship_status,
       emergency_contact_name, emergency_contact_number, alt_mobile, alt_email,
       reporting_manager_id, work_location_id, employment_type, joining_salary,
-      probation_period_days, confirmation_date, onboarding_status, status,
+      probation_period_days, confirmation_date, onboarding_status, status, login_password,
       // KYC fields
       aadhaar_number, pan_number, bank_account_number, bank_name, bank_ifsc, upi_id
     } = req.body;
@@ -359,8 +468,8 @@ const employeeController = {
       }
 
       // Check if employee onboarding status was updated to Approved and user login exists
-      if ((onboarding_status === 'Approved' || onboarding_status === 'Onboarding Completed') && oldEmployee.onboarding_status !== onboarding_status) {
-        await employeeController.autoCreateUserAccount(id, email || oldEmployee.email, full_name || oldEmployee.full_name);
+      if ((onboarding_status === 'Approved' || onboarding_status === 'Onboarding Completed') || login_password) {
+        await employeeController.autoCreateUserAccount(id, email || oldEmployee.email, full_name || oldEmployee.full_name, login_password);
       }
 
       // Log changes in immutable audit log
@@ -377,6 +486,11 @@ const employeeController = {
   // Soft Delete Employee
   deleteEmployee: async (req, res) => {
     const { id } = req.params;
+
+    // Restrict soft-delete to Super Admin and Admin Controller
+    if (req.user.roleName !== 'Super Admin' && req.user.roleName !== 'Admin Controller') {
+      return res.status(403).json({ message: 'Access denied: Sub-admins are not authorized to delete system data.' });
+    }
 
     try {
       const { data: employee, error } = await supabase.from('employees').select('*').eq('id', id);
@@ -467,6 +581,10 @@ const employeeController = {
       await supabase.from('employee_documents').insert([{
         employee_id: id, document_type: documentType || 'Other', document_name: docName, file_path: docPath, file_size: docSize
       }]);
+
+      if (documentType === 'Other') {
+        await supabase.from('employees').update({ photo_path: docPath }).eq('id', id);
+      }
 
       await logAudit(req, 'UPLOAD_DOCUMENT', `employees/${id}`, null, { type: documentType, name: docName });
 

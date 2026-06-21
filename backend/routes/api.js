@@ -163,24 +163,50 @@ router.put('/security/roles/:roleId/permissions', authenticateToken, requirePerm
 router.get('/security/settings', authenticateToken, requirePermission('security:settings'), securityController.getSystemSettings);
 router.put('/security/settings', authenticateToken, requirePermission('security:settings'), securityController.updateSystemSettings);
 
+router.get('/security/licensing', authenticateToken, securityController.getLicensing);
+router.put('/security/licensing', authenticateToken, securityController.updateLicensing);
+router.get('/security/sub-admin-licensing/:userId', authenticateToken, securityController.getSubAdminLicensing);
+router.put('/security/sub-admin-licensing/:userId', authenticateToken, securityController.updateSubAdminLicensing);
+
 /* =========================================================================
    8. SECURE DOCUMENT RETRIEVAL (Permission validation before serving files)
    ========================================================================= */
 router.get('/documents/download/:filename', authenticateToken, async (req, res) => {
   const { filename } = req.params;
   const dir = process.env.UPLOAD_DIR || './uploads';
-  const filePath = path.join(dir, filename);
-
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).json({ message: 'Requested document file not found.' });
-  }
+  let targetFilename = filename;
+  let filePath = path.join(dir, filename);
 
   try {
-    // 1. If Super Admin/HR/Finance, allow download
+    // Resolve by document ID if filename starts with id-
+    if (filename.startsWith('id-')) {
+      const docId = parseInt(filename.split('-')[1], 10);
+      if (!isNaN(docId)) {
+        const { data: docs, error: docErr } = await supabase
+          .from('employee_documents')
+          .select('*')
+          .eq('id', docId);
+        
+        if (!docErr && docs && docs.length > 0) {
+          const doc = docs[0];
+          filePath = doc.file_path;
+          targetFilename = path.basename(filePath);
+        } else {
+          return res.status(404).json({ message: 'Document record not found in database.' });
+        }
+      }
+    }
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: 'Requested document file not found.' });
+    }
+
+    // 1. If Super Admin/HR/Finance/Admin Controller/Admin, allow download
     const canViewKyc = req.user.permissions.includes('kyc:view');
     const isHrOrFinance = req.user.roleName === 'HR Manager' || req.user.roleName === 'Finance Manager';
+    const isPrivilegedRole = req.user.roleName === 'Super Admin' || req.user.roleName === 'Admin Controller' || req.user.roleName === 'Admin';
 
-    if (canViewKyc || isHrOrFinance || req.user.roleName === 'Super Admin') {
+    if (canViewKyc || isHrOrFinance || isPrivilegedRole) {
       return res.sendFile(path.resolve(filePath));
     }
 
@@ -190,14 +216,14 @@ router.get('/documents/download/:filename', authenticateToken, async (req, res) 
         .from('employee_documents')
         .select('id')
         .eq('employee_id', req.user.employeeId)
-        .ilike('file_path', `%${filename}%`);
+        .ilike('file_path', `%${targetFilename}%`);
 
       // Check if photo is requested
       const { data: photoRecord } = await supabase
         .from('employees')
         .select('id')
         .eq('id', req.user.employeeId)
-        .ilike('photo_path', `%${filename}%`);
+        .ilike('photo_path', `%${targetFilename}%`);
 
       if ((records && records.length > 0) || (photoRecord && photoRecord.length > 0)) {
         return res.sendFile(path.resolve(filePath));

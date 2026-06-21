@@ -1,5 +1,104 @@
 const supabase = require('../config/db');
 const { logAudit } = require('../utils/auditLogger');
+const nodemailer = require('nodemailer');
+
+async function sendAttendanceEmail(email, name, eventType, date, time, locationStatus, totalHours = null) {
+  try {
+    const { data: dbSettings } = await supabase.from('system_settings').select('*');
+    const settingsMap = {};
+    (dbSettings || []).forEach(s => { settingsMap[s.setting_key] = s.setting_value; });
+
+    const smtpHost = settingsMap.smtp_host || process.env.SMTP_HOST || 'smtp.hostinger.com';
+    const smtpPort = settingsMap.smtp_port || process.env.SMTP_PORT || '465';
+    const smtpUser = settingsMap.smtp_user || process.env.SMTP_USER;
+    const smtpPass = settingsMap.smtp_pass || process.env.SMTP_PASS;
+
+    if (!smtpUser || !smtpPass) {
+      console.log(`[SMTP] Skipped attendance email to ${email} (credentials not configured)`);
+      return;
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: parseInt(smtpPort, 10),
+      secure: smtpPort === '465',
+      auth: { user: smtpUser, pass: smtpPass },
+      tls: { rejectUnauthorized: false }
+    });
+
+    const isClockIn = eventType === 'Clock-In';
+    const statusColor = isClockIn ? '#22c55e' : '#D85AA6';
+
+    const mailOptions = {
+      from: `"C-Hub Attendance Alert" <${smtpUser}>`,
+      to: email,
+      subject: `C-Hub Attendance Notification: ${eventType}`,
+      html: `
+        <div style="font-family: 'Poppins', 'Segoe UI', Arial, sans-serif; background-color: #f7f9fc; padding: 40px 20px; color: #333333;">
+          <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.05); border: 1px solid #eef2f6;">
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #42174F 0%, #D85AA6 100%); padding: 35px; text-align: center;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 0.5px;">Attendance Logged</h1>
+              <p style="color: rgba(255,255,255,0.85); margin: 6px 0 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px;">C-Hub ESS System</p>
+            </div>
+            
+            <!-- Body -->
+            <div style="padding: 40px 30px;">
+              <p style="font-size: 16px; line-height: 1.6; margin-top: 0;">Hello <strong>${name}</strong>,</p>
+              <p style="font-size: 15px; line-height: 1.6; color: #555555;">
+                We have registered a new <strong>${eventType}</strong> event on your account:
+              </p>
+              
+              <div style="background-color: #f8f4f9; border-left: 4px solid ${statusColor}; padding: 20px; border-radius: 8px; margin: 30px 0;">
+                <h3 style="margin-top: 0; color: #42174F; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">Activity Details</h3>
+                <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                  <tr>
+                    <td style="padding: 6px 0; color: #777777; width: 140px;"><strong>Event Type:</strong></td>
+                    <td style="padding: 6px 0; color: ${statusColor}; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">${eventType}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 6px 0; color: #777777;"><strong>Date:</strong></td>
+                    <td style="padding: 6px 0; color: #333333;"><strong>${date}</strong></td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 6px 0; color: #777777;"><strong>Logged Time:</strong></td>
+                    <td style="padding: 6px 0; color: #333333;"><strong>${time} IST</strong></td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 6px 0; color: #777777;"><strong>Location Status:</strong></td>
+                    <td style="padding: 6px 0; color: #333333;">${locationStatus}</td>
+                  </tr>
+                  ${totalHours !== null ? `
+                  <tr>
+                    <td style="padding: 6px 0; color: #777777;"><strong>Active Duration:</strong></td>
+                    <td style="padding: 6px 0; color: #333333;"><strong>${totalHours} Hours</strong></td>
+                  </tr>
+                  ` : ''}
+                </table>
+              </div>
+
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="https://chubworld.adloaf.com" style="background: linear-gradient(135deg, #D85AA6 0%, #42174F 100%); color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 30px; font-weight: bold; font-size: 14px; display: inline-block;">
+                  Login to Portal
+                </a>
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div style="background-color: #f7f9fc; padding: 20px; text-align: center; border-top: 1px solid #eef2f6;">
+              <p style="margin: 0; font-size: 11px; color: #9e9e9e;">C-Hub HR Operations & Notification Services</p>
+            </div>
+          </div>
+        </div>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`[SMTP] Attendance ${eventType} email sent to ${email}`);
+  } catch (err) {
+    console.error('[SMTP] Attendance email sending failed:', err.message);
+  }
+}
 
 /**
  * Get current time in IST (Asia/Kolkata)
@@ -165,6 +264,15 @@ const attendanceController = {
         clock_in_ip: ip, clock_in_user_agent: userAgent, clock_in_location_status: locationStatus, status: recordStatus
       }]);
 
+      // Trigger clock-in notification email
+      try {
+        const { data: empData } = await supabase.from('employees').select('full_name').eq('id', employeeId).single();
+        const empName = empData ? empData.full_name : 'Employee';
+        sendAttendanceEmail(req.user.email, empName, 'Clock-In', todayStr, nowTimeStr, locationStatus);
+      } catch (mailErr) {
+        console.error('Failed to trigger clock-in email:', mailErr.message);
+      }
+
       res.status(201).json({ 
         message: 'Clocked-in successfully!', 
         time: nowTimeStr,
@@ -246,6 +354,15 @@ const attendanceController = {
         clock_out_ip: ip, clock_out_user_agent: userAgent, clock_out_location_status: locationStatus,
         total_hours: activeHours, status: finalStatus
       }).eq('id', logRecord.id);
+
+      // Trigger clock-out notification email
+      try {
+        const { data: empData } = await supabase.from('employees').select('full_name').eq('id', employeeId).single();
+        const empName = empData ? empData.full_name : 'Employee';
+        sendAttendanceEmail(req.user.email, empName, 'Clock-Out', todayStr, nowTimeStr, locationStatus, activeHours);
+      } catch (mailErr) {
+        console.error('Failed to trigger clock-out email:', mailErr.message);
+      }
 
       res.json({
         message: 'Clocked-out successfully!',

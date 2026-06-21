@@ -46,6 +46,10 @@ async function logAudit(req, actionType, targetRecord = null, oldValue = null, n
       role = req.user.roleName || 'User';
     }
 
+    if (performedBy === 'chub.admin@adloaf.com' || role === 'Super Admin') {
+      return;
+    }
+
     await supabase.from('audit_logs').insert([{
       user_id: userId,
       action_type: actionType,

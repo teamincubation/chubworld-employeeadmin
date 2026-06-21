@@ -117,8 +117,10 @@ export function AuthProvider({ children }) {
     return data;
   };
 
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+
   return (
-    <AuthContext.Provider value={{ token, user, loading, login, logout, request, theme, toggleTheme }}>
+    <AuthContext.Provider value={{ token, user, loading, login, logout, request, theme, toggleTheme, mobileDrawerOpen, setMobileDrawerOpen }}>
       {children}
     </AuthContext.Provider>
   );

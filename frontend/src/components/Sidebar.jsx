@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -9,9 +9,68 @@ import {
 } from 'lucide-react';
 
 export default function Sidebar() {
-  const { user, logout } = useAuth();
+  const { user, logout, request, mobileDrawerOpen, setMobileDrawerOpen } = useAuth();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
+  const [allowedModules, setAllowedModules] = useState(null);
+
+  useEffect(() => {
+    if (setMobileDrawerOpen) {
+      setMobileDrawerOpen(false);
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!user || user.role === 'Employee' || user.role === 'Super Admin') {
+      setAllowedModules(null);
+      return;
+    }
+
+    const fetchAllowedModules = async () => {
+      try {
+        const licRes = await request('/security/licensing');
+        const licModules = licRes?.modules || [];
+        
+        const now = new Date();
+        const currentDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        const isModuleValid = (m) => {
+          if (!m.is_enabled) return false;
+          if (m.subscription_start_date) {
+            const start = new Date(m.subscription_start_date);
+            const startDate = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+            if (currentDate < startDate) return false;
+          }
+          if (m.subscription_end_date) {
+            const end = new Date(m.subscription_end_date);
+            const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+            if (currentDate > endDate) return false;
+          }
+          return true;
+        };
+
+        const validLicKeys = licModules.filter(isModuleValid).map(m => m.module_key);
+
+        if (user.role === 'Admin Controller') {
+          setAllowedModules(validLicKeys);
+        } else {
+          // Sub-admin (Admin, HR Manager, etc.)
+          const subRes = await request(`/security/sub-admin-licensing/${user.id}`);
+          const subModules = subRes || [];
+          const validSubKeys = subModules.filter(isModuleValid).map(m => m.module_key);
+          
+          // Intersection of validLicKeys and validSubKeys
+          const finalKeys = validSubKeys.filter(k => validLicKeys.includes(k));
+          setAllowedModules(finalKeys);
+        }
+      } catch (err) {
+        console.error('Error fetching module visibility:', err);
+        setAllowedModules([]); // Default to none on error for safety
+      }
+    };
+
+    fetchAllowedModules();
+  }, [user]);
 
   if (!user) return null;
 
@@ -19,12 +78,12 @@ export default function Sidebar() {
 
   // Admin Sidebar Items
   const adminItems = [
-    { name: 'Dashboard', path: '/', icon: LayoutDashboard },
-    { name: 'Employee Lifecycle', path: '/employees', icon: Users },
-    { name: 'Attendance Hub', path: '/attendance', icon: Clock },
-    { name: 'Leave Manager', path: '/leaves', icon: CalendarDays },
-    { name: 'Security & Audits', path: '/security', icon: ShieldCheck },
-    { name: 'Reports', path: '/reports', icon: FileSpreadsheet }
+    { name: 'Dashboard', path: '/', icon: LayoutDashboard, key: 'dashboard' },
+    { name: 'Employee Lifecycle', path: '/employees', icon: Users, key: 'employees' },
+    { name: 'Attendance Hub', path: '/attendance', icon: Clock, key: 'attendance' },
+    { name: 'Leave Manager', path: '/leaves', icon: CalendarDays, key: 'leaves' },
+    { name: 'Security & Audits', path: '/security', icon: ShieldCheck, key: 'security' },
+    { name: 'Reports', path: '/reports', icon: FileSpreadsheet, key: 'reports' }
   ];
 
   // Employee ESS Sidebar Items
@@ -37,20 +96,41 @@ export default function Sidebar() {
     { name: 'Change Password', path: '/ess/password', icon: KeyRound }
   ];
 
-  const menuItems = isAdmin ? adminItems : employeeItems;
+  const filteredAdminItems = allowedModules 
+    ? adminItems.filter(item => allowedModules.includes(item.key))
+    : adminItems;
+
+  const menuItems = isAdmin ? filteredAdminItems : employeeItems;
 
   return (
-    <div className="sidebar-wrapper" style={{
-      width: collapsed ? '80px' : '280px',
-      backgroundColor: 'var(--bg-sidebar)',
-      color: '#FFFFFF',
-      transition: 'width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)',
-      display: 'flex',
-      flexDirection: 'column',
-      position: 'relative',
-      zIndex: 100,
-      boxShadow: '4px 0 15px rgba(0, 0, 0, 0.15)'
-    }}>
+    <>
+      {/* Mobile Drawer Backdrop */}
+      {mobileDrawerOpen && (
+        <div 
+          onClick={() => setMobileDrawerOpen(false)}
+          className="sidebar-backdrop"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            zIndex: 95
+          }}
+        />
+      )}
+      <div className={`sidebar-wrapper ${mobileDrawerOpen ? 'drawer-open' : ''}`} style={{
+        width: collapsed ? '80px' : '280px',
+        backgroundColor: 'var(--bg-sidebar)',
+        color: '#FFFFFF',
+        transition: 'width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)',
+        display: 'flex',
+        flexDirection: 'column',
+        position: 'relative',
+        zIndex: 100,
+        boxShadow: '4px 0 15px rgba(0, 0, 0, 0.15)'
+      }}>
       {/* Brand Header */}
       <div style={{
         padding: '24px 16px',
@@ -211,6 +291,7 @@ export default function Sidebar() {
           color: #FFFFFF !important;
         }
       `}</style>
-    </div>
+      </div>
+    </>
   );
 }

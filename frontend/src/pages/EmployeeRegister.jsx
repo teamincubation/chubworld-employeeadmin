@@ -43,6 +43,7 @@ export default function EmployeeRegister() {
     alt_mobile: '', alt_email: '', reporting_manager_id: '',
     work_location_id: '', employment_type: 'Full-time', joining_salary: '',
     probation_period_days: 180, confirmation_date: '', onboarding_status: 'Draft',
+    login_password: '',
     // KYC
     aadhaar_number: '', pan_number: '', bank_account_number: '',
     bank_name: '', bank_ifsc: '', upi_id: ''
@@ -357,6 +358,7 @@ export default function EmployeeRegister() {
       probation_period_days: emp.probation_period_days || 180,
       confirmation_date: emp.confirmation_date ? emp.confirmation_date.split('T')[0] : '',
       onboarding_status: emp.onboarding_status || 'Draft',
+      login_password: '',
       // KYC fields will display as masked unless unmasked
       aadhaar_number: 'XXXX XXXX XXXX',
       pan_number: 'XXXXX1234X',
@@ -383,6 +385,7 @@ export default function EmployeeRegister() {
       alt_mobile: '', alt_email: '', reporting_manager_id: '',
       work_location_id: '', employment_type: 'Full-time', joining_salary: '',
       probation_period_days: 180, confirmation_date: '', onboarding_status: 'Draft',
+      login_password: '',
       aadhaar_number: '', pan_number: '', bank_account_number: '',
       bank_name: '', bank_ifsc: '', upi_id: ''
     });
@@ -760,6 +763,29 @@ export default function EmployeeRegister() {
                     <option value="Widowed">Widowed</option>
                   </select>
                 </div>
+                <div className="form-group">
+                  <label className="form-label">Nationality</label>
+                  <input type="text" className="form-control" placeholder="e.g. Indian" value={formData.nationality} onChange={(e) => setFormData({...formData, nationality: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Emergency Contact Name</label>
+                  <input type="text" className="form-control" placeholder="Contact Name" value={formData.emergency_contact_name} onChange={(e) => setFormData({...formData, emergency_contact_name: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Emergency Contact Number</label>
+                  <input type="text" className="form-control" placeholder="Contact Number" value={formData.emergency_contact_number} onChange={(e) => setFormData({...formData, emergency_contact_number: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Login Password {viewMode === 'add' ? '*' : '(Leave blank to keep current)'}</label>
+                  <input 
+                    type="password" 
+                    className="form-control" 
+                    placeholder={viewMode === 'add' ? "Temporary login password" : "New password if changing"}
+                    value={formData.login_password} 
+                    onChange={(e) => setFormData({...formData, login_password: e.target.value})} 
+                    required={viewMode === 'add'}
+                  />
+                </div>
               </div>
             )}
 
@@ -842,7 +868,7 @@ export default function EmployeeRegister() {
                   </select>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Work Location & Geofence</label>
+                  <label className="form-label">Work Location & Geofence (Geofence Site)</label>
                   <select className="form-control" value={formData.work_location_id} onChange={(e) => setFormData({...formData, work_location_id: e.target.value})}>
                     <option value="">Assign Location</option>
                     {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
@@ -869,6 +895,14 @@ export default function EmployeeRegister() {
                 <div className="form-group">
                   <label className="form-label">Contract Till Date</label>
                   <input type="date" className="form-control" value={formData.contract_till_date} onChange={(e) => setFormData({...formData, contract_till_date: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Probation Days</label>
+                  <input type="number" className="form-control" placeholder="e.g. 180" value={formData.probation_period_days} onChange={(e) => setFormData({...formData, probation_period_days: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Interview HRs</label>
+                  <input type="text" className="form-control" placeholder="Interview HR names" value={formData.interviewed_hrs} onChange={(e) => setFormData({...formData, interviewed_hrs: e.target.value})} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Onboarding Verification Status</label>
@@ -1022,11 +1056,18 @@ export default function EmployeeRegister() {
                 overflow: 'hidden', border: '3px solid var(--chub-pink)', flexShrink: 0
               }}>
                 {profileData.employee.photo_path ? (
-                  <img 
-                    src={`${API_BASE_URL}/documents/download/${profileData.employee.photo_path.split('/').pop()}`} 
-                    alt="Photo" 
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
+                  <a 
+                    href={`${API_BASE_URL}/documents/download/${profileData.employee.photo_path.split('/').pop()}?token=${localStorage.getItem('token')}`}
+                    download={`photo-${profileData.employee.employee_id}.png`}
+                    title="Click to download employee photo"
+                    style={{ display: 'block', width: '100%', height: '100%' }}
+                  >
+                    <img 
+                      src={`${API_BASE_URL}/documents/download/${profileData.employee.photo_path.split('/').pop()}?token=${localStorage.getItem('token')}`} 
+                      alt="Photo" 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }}
+                    />
+                  </a>
                 ) : (
                   <Users size={48} style={{ color: 'var(--chub-purple)' }} />
                 )}
@@ -1140,25 +1181,13 @@ export default function EmployeeRegister() {
                       <div key={doc.id} className="flex-between" style={{ padding: '8px 12px', backgroundColor: 'var(--bg-primary)', borderRadius: '6px', fontSize: '13px' }}>
                         <span style={{ fontWeight: 600 }}>{doc.document_type}</span>
                         <a 
-                          href={`${API_BASE_URL}/documents/download/${doc.id}`} // Will secure serve
-                          // In demo, download by filename directly
-                          onClick={async (e) => {
-                            e.preventDefault();
-                            // Fetch via auth header
-                            try {
-                              const res = await fetch(`${API_BASE_URL}/documents/download/employee-${doc.id}`, { // fallback checks or fetch by id
-                                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-                              });
-                              if (!res.ok) throw new Error();
-                              // Simple open document link
-                              window.open(`${API_BASE_URL}/documents/download/doc-${doc.id}?token=${localStorage.getItem('token')}`, '_blank');
-                            } catch {
-                              alert('Unable to secure download document.');
-                            }
-                          }}
-                          style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--chub-pink)' }}
+                          href={`${API_BASE_URL}/documents/download/id-${doc.id}?token=${localStorage.getItem('token')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--chub-pink)', textDecoration: 'none' }}
+                          title={`Click to view/download ${doc.document_name}`}
                         >
-                          <FileText size={14} /> {doc.document_name.slice(-15)}
+                          <FileText size={14} /> {doc.document_name}
                         </a>
                       </div>
                     ))}

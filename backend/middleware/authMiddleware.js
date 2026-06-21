@@ -11,8 +11,8 @@ const JWT_SECRET = process.env.JWT_SECRET || 'chub_super_secret_jwt_key_2026_cre
  */
 async function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
-  // Supporting Bearer token
-  const token = authHeader && authHeader.split(' ')[1];
+  // Supporting Bearer token or token query parameter
+  const token = (authHeader && authHeader.split(' ')[1]) || req.query.token;
 
   if (!token) {
     return res.status(401).json({ message: 'Authentication required. No token provided.' });

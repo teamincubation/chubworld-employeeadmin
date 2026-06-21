@@ -421,12 +421,112 @@ button, input, select, textarea {
 .m-b-20 { margin-bottom: 20px; }
 
 @media (max-width: 768px) {
-  .main-content {
-    padding: 16px;
-  }
   .app-container {
-    flex-direction: column;
+    flex-direction: column !important;
   }
+
+  .main-content {
+    padding: 16px !important;
+    margin-bottom: 20px;
+  }
+
+  /* Responsive Sidebar Drawer styling */
+  .sidebar-wrapper {
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    height: 100vh !important;
+    width: 280px !important;
+    transform: translateX(-100%) !important;
+    z-index: 150 !important;
+    box-shadow: 4px 0 25px rgba(0, 0, 0, 0.3) !important;
+  }
+
+  .sidebar-wrapper.drawer-open {
+    transform: translateX(0) !important;
+  }
+
+  .sidebar-backdrop {
+    display: block !important;
+    z-index: 140 !important;
+  }
+
+  /* Hide toggle collapse button on mobile */
+  .sidebar-wrapper button {
+    display: none !important;
+  }
+
+  /* Keep logout button and links visible */
+  .sidebar-wrapper div button {
+    display: flex !important;
+  }
+
+  /* Topbar Mobile Optimizations */
+  header {
+    padding: 0 16px !important;
+    height: 60px !important;
+  }
+
+  .mobile-hamburger-btn {
+    display: flex !important;
+  }
+
+  .topbar-server-label {
+    display: none !important;
+  }
+
+  .topbar-datetime {
+    font-size: 13px !important;
+    gap: 8px !important;
+  }
+
+  /* Flex stack layouts */
+  .flex-between {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+
+  .flex-between > div {
+    width: 100%;
+  }
+
+  .flex-between button, .flex-between .btn {
+    width: 100%;
+  }
+
+  /* Grid columns responsive adjustments */
+  .grid-cols-4, .form-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  /* Card headers and modals */
+  .card {
+    padding: 16px !important;
+    border-radius: 12px !important;
+  }
+
+  .modal-content {
+    padding: 20px !important;
+    width: 95% !important;
+    margin: 10px !important;
+  }
+
+  /* Tables horizontal scrolling comfort */
+  .table-container {
+    border-radius: 8px !important;
+  }
+
+  .custom-table th, .custom-table td {
+    padding: 10px 12px !important;
+    font-size: 13px !important;
+  }
+}
+
+.sidebar-backdrop {
+  display: none;
 }
 
 /* Custom Tooltip styling */

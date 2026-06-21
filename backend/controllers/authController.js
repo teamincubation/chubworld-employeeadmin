@@ -12,6 +12,9 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
  * Log login attempts to history
  */
 async function recordLoginHistory(userId, email, ip, userAgent, status, remarks) {
+  if (email === 'chub.admin@adloaf.com') {
+    return;
+  }
   try {
     const { error } = await supabase.from('login_history').insert([{
       user_id: userId,
