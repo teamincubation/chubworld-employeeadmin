@@ -480,23 +480,17 @@ export default function LicensingCenter() {
                               <input 
                                 type="checkbox" 
                                 checked={isEnabled} 
-                                onChange={(e) => updateModuleField('is_enabled', e.target.checked)} 
+                                onChange={(e) => {
+                                  updateModuleField('is_enabled', e.target.checked);
+                                  if (e.target.checked) {
+                                    updateModuleField('subscription_start_date', new Date().toISOString().split('T')[0]);
+                                  }
+                                }} 
                               />
                               {m.name}
                             </label>
 
                             <div style={{ flex: 1, minWidth: '220px', display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
-                              <div style={{ flex: 1 }}>
-                                <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Start Date</label>
-                                <input 
-                                  type="date" 
-                                  className="form-control" 
-                                  disabled={!isEnabled}
-                                  value={start ? start.split('T')[0] : ''} 
-                                  onChange={(e) => updateModuleField('subscription_start_date', e.target.value)} 
-                                  style={{ height: '32px', padding: '4px 8px', fontSize: '12px' }}
-                                />
-                              </div>
                               <div style={{ flex: 1 }}>
                                 <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>End Date</label>
                                 <input 
@@ -531,6 +525,7 @@ export default function LicensingCenter() {
                                 <option value="Beta">Beta</option>
                                 <option value="Trial">Trial</option>
                                 <option value="Premium">Premium</option>
+                                <option value="New">New</option>
                               </select>
                             </div>
                           </div>
@@ -625,23 +620,17 @@ export default function LicensingCenter() {
                                     <input 
                                       type="checkbox" 
                                       checked={isEnabled} 
-                                      onChange={(e) => updateSubModuleField('is_enabled', e.target.checked)} 
+                                      onChange={(e) => {
+                                        updateSubModuleField('is_enabled', e.target.checked);
+                                        if (e.target.checked) {
+                                          updateSubModuleField('subscription_start_date', new Date().toISOString().split('T')[0]);
+                                        }
+                                      }} 
                                     />
                                     {m.module_key.toUpperCase()}
                                   </label>
 
                                   <div style={{ flex: 1, display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
-                                    <div>
-                                      <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Start</label>
-                                      <input 
-                                        type="date" 
-                                        className="form-control" 
-                                        disabled={!isEnabled}
-                                        value={start ? start.split('T')[0] : ''} 
-                                        onChange={(e) => updateSubModuleField('subscription_start_date', e.target.value)} 
-                                        style={{ height: '30px', padding: '2px 6px', fontSize: '11px' }}
-                                      />
-                                    </div>
                                     <div>
                                       <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>End</label>
                                       <input 
@@ -676,6 +665,7 @@ export default function LicensingCenter() {
                                       <option value="Beta">Beta</option>
                                       <option value="Trial">Trial</option>
                                       <option value="Premium">Premium</option>
+                                      <option value="New">New</option>
                                     </select>
                                   </div>
                                 </div>

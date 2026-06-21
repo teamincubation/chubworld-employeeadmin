@@ -74,7 +74,7 @@ const securityController = {
       const { data: users, error } = await supabase
         .from('users')
         .select(`
-          id, email, status, onboarding_completed,
+          id, email, status, onboarding_completed, full_name,
           roles(name),
           employees(employee_id, full_name, deleted_at)
         `)
@@ -90,7 +90,7 @@ const securityController = {
 
       let mappedUsers = (users || []).map(u => {
         const emp = (u.employees && u.employees.length > 0) ? u.employees[0] : null;
-        let fullName = emp ? emp.full_name : null;
+        let fullName = emp ? emp.full_name : (u.full_name || null);
         if (u.roles && u.roles.name === 'Admin Controller' && controllerMap[u.id]) {
           fullName = controllerMap[u.id];
         }
@@ -673,6 +673,116 @@ const securityController = {
     } catch (err) {
       console.error('updateAdminControllerStatus error:', err.message);
       res.status(500).json({ message: 'Error updating Admin Controller status.' });
+    }
+  },
+
+  createSubAdmin: async (req, res) => {
+    if (req.user.roleName !== 'Super Admin' && req.user.roleName !== 'Admin Controller') {
+      return res.status(403).json({ message: 'Access denied: Admin Controller privilege required.' });
+    }
+    const { name, email, password, roleId } = req.body;
+    if (!name || !email || !password || !roleId) {
+      return res.status(400).json({ message: 'All fields (name, email, password, and role) are required.' });
+    }
+    try {
+      // 1. Check sub-admin creation limit
+      const { data: limitSettings } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'admin_creation_limit').limit(1);
+      const limit = limitSettings && limitSettings.length > 0 ? parseInt(limitSettings[0].setting_value, 10) : 3;
+
+      const { data: currentSubAdmins, error: countErr } = await supabase
+        .from('users')
+        .select('id')
+        .in('role_id', [2, 3, 4, 5]);
+
+      if (countErr) throw countErr;
+
+      if (currentSubAdmins && currentSubAdmins.length >= limit) {
+        return res.status(400).json({ message: `Access denied: Sub-admin creation limit reached (${limit}).` });
+      }
+
+      // 2. Check email uniqueness (against users and employees)
+      const { data: extUser } = await supabase.from('users').select('id').eq('email', email);
+      const { data: extEmp } = await supabase.from('employees').select('id').eq('email', email);
+      if ((extUser && extUser.length > 0) || (extEmp && extEmp.length > 0)) {
+        return res.status(400).json({ message: 'A user or employee with this email already exists.' });
+      }
+
+      // 3. Hash password and insert user
+      const bcrypt = require('bcryptjs');
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash(password, salt);
+
+      const { data: newUser, error: createErr } = await supabase
+        .from('users')
+        .insert([{
+          email,
+          password_hash: passwordHash,
+          role_id: parseInt(roleId, 10),
+          status: 'active',
+          onboarding_completed: true,
+          full_name: name
+        }])
+        .select('id, email, status, onboarding_completed, full_name, role_id')
+        .single();
+
+      if (createErr) throw createErr;
+
+      // Log Security audit
+      await logAudit(req, 'SUB_ADMIN_CREATED', `users/${newUser.id}`, null, { email, roleId, name });
+
+      res.status(201).json(newUser);
+    } catch (err) {
+      console.error('createSubAdmin error:', err.message);
+      res.status(500).json({ message: 'Error creating sub-admin account.' });
+    }
+  },
+
+  updateSubAdmin: async (req, res) => {
+    if (req.user.roleName !== 'Super Admin' && req.user.roleName !== 'Admin Controller') {
+      return res.status(403).json({ message: 'Access denied: Admin Controller privilege required.' });
+    }
+    const { userId } = req.params;
+    const { name, email, password, roleId } = req.body;
+    if (!name || !email || !roleId) {
+      return res.status(400).json({ message: 'Name, email, and role are required.' });
+    }
+    try {
+      const { data: targetUser, error: findErr } = await supabase.from('users').select('*').eq('id', userId).single();
+      if (findErr || !targetUser) {
+        return res.status(404).json({ message: 'Sub-admin account not found.' });
+      }
+
+      // Check email uniqueness if changed
+      if (email !== targetUser.email) {
+        const { data: extUser } = await supabase.from('users').select('id').eq('email', email);
+        const { data: extEmp } = await supabase.from('employees').select('id').eq('email', email);
+        if ((extUser && extUser.length > 0) || (extEmp && extEmp.length > 0)) {
+          return res.status(400).json({ message: 'A user or employee with this email already exists.' });
+        }
+      }
+
+      const updates = {
+        email,
+        role_id: parseInt(roleId, 10),
+        full_name: name
+      };
+
+      if (password) {
+        const bcrypt = require('bcryptjs');
+        const salt = await bcrypt.genSalt(10);
+        updates.password_hash = await bcrypt.hash(password, salt);
+      }
+
+      const { error: updateErr } = await supabase.from('users').update(updates).eq('id', userId);
+      if (updateErr) throw updateErr;
+
+      // Log Security audit
+      await logAudit(req, 'SUB_ADMIN_UPDATED', `users/${userId}`, null, { email, roleId, name });
+
+      res.json({ message: 'Sub-admin details updated successfully.' });
+    } catch (err) {
+      console.error('updateSubAdmin error:', err.message);
+      res.status(500).json({ message: 'Error updating sub-admin details.' });
     }
   }
 };

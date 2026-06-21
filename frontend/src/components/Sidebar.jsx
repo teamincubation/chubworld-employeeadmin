@@ -13,6 +13,24 @@ export default function Sidebar() {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [allowedModules, setAllowedModules] = useState(null);
+  const [moduleLabels, setModuleLabels] = useState({});
+
+  const getLabelStyle = (label) => {
+    const norm = (label || '').toLowerCase();
+    if (norm === 'beta') {
+      return { color: '#D97706', backgroundColor: '#FEF3C7' }; // Amber/Orange
+    }
+    if (norm === 'trial') {
+      return { color: '#2563EB', backgroundColor: '#DBEAFE' }; // Blue
+    }
+    if (norm === 'premium') {
+      return { color: '#7C3AED', backgroundColor: '#F3E8FF' }; // Purple
+    }
+    if (norm === 'new') {
+      return { color: '#059669', backgroundColor: '#D1FAE5' }; // Emerald/Green
+    }
+    return { color: '#9CA3AF', backgroundColor: '#F3F4F6' };
+  };
 
   useEffect(() => {
     if (setMobileDrawerOpen) {
@@ -21,8 +39,9 @@ export default function Sidebar() {
   }, [location.pathname]);
 
   useEffect(() => {
-    if (!user || user.role === 'Employee' || user.role === 'Super Admin') {
+    if (!user || user.role === 'Employee') {
       setAllowedModules(null);
+      setModuleLabels({});
       return;
     }
 
@@ -30,7 +49,21 @@ export default function Sidebar() {
       try {
         const licRes = await request('/security/licensing');
         const licModules = licRes?.modules || [];
-        
+
+        // Parse labels from license database
+        const labels = {};
+        licModules.forEach(m => {
+          if (m.feature_label) {
+            labels[m.module_key] = m.feature_label;
+          }
+        });
+        setModuleLabels(labels);
+
+        if (user.role === 'Super Admin') {
+          setAllowedModules(null);
+          return;
+        }
+
         const now = new Date();
         const currentDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
@@ -205,7 +238,21 @@ export default function Sidebar() {
             >
               <Icon size={20} style={{ flexShrink: 0, color: isActive ? '#FFFFFF' : 'var(--chub-pink)' }} />
               {!collapsed && <span>{item.name}</span>}
-              {isActive && !collapsed && (
+              {!collapsed && item.key && moduleLabels[item.key] && (
+                <span style={{
+                  fontSize: '9px',
+                  fontWeight: 800,
+                  textTransform: 'uppercase',
+                  padding: '2px 6px',
+                  borderRadius: '10px',
+                  marginLeft: 'auto',
+                  letterSpacing: '0.5px',
+                  ...getLabelStyle(moduleLabels[item.key])
+                }}>
+                  {moduleLabels[item.key]}
+                </span>
+              )}
+              {isActive && !collapsed && !moduleLabels[item.key] && (
                 <div style={{
                   position: 'absolute',
                   right: '12px',

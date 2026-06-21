@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { 
   ShieldCheck, Lock, ToggleLeft, ToggleRight, Key, 
   MapPin, Settings, AlertTriangle, ShieldAlert, 
-  CheckCircle, Plus, Edit3, Trash2, Building
+  CheckCircle, Plus, Edit3, Trash2, Building, Users
 } from 'lucide-react';
 
 export default function SecurityCenter() {
@@ -26,7 +26,7 @@ export default function SecurityCenter() {
   const [desigForm, setDesigForm] = useState({ id: null, name: '', department_id: '' });
   
   // Tab control
-  const [activeTab, setActiveTab] = useState('audits'); // 'audits', 'users', 'locations', 'settings'
+  const [activeTab, setActiveTab] = useState('audits'); // 'audits', 'users', 'locations', 'settings', 'subadmins'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -45,6 +45,101 @@ export default function SecurityCenter() {
   const [selectedSubAdminId, setSelectedSubAdminId] = useState('');
   const [subAdminAccess, setSubAdminAccess] = useState([]);
   const [licensingSaving, setLicensingSaving] = useState(false);
+
+  // Sub-admins management specific states
+  const [showSubAdminModal, setShowSubAdminModal] = useState(false);
+  const [subAdminForm, setSubAdminForm] = useState({ id: null, name: '', email: '', password: '', roleId: '2' });
+  const [adminCreationLimit, setAdminCreationLimit] = useState(3);
+  const [subAdminAccessSaving, setSubAdminAccessSaving] = useState(false);
+
+  const handleOpenAddSubAdmin = () => {
+    setSubAdminForm({ id: null, name: '', email: '', password: '', roleId: '2' });
+    setShowSubAdminModal(true);
+  };
+
+  const handleOpenEditSubAdmin = (sa) => {
+    const roleIdMap = {
+      'Admin': '2',
+      'HR Manager': '3',
+      'Department Manager': '4',
+      'Finance Manager': '5'
+    };
+    setSubAdminForm({
+      id: sa.id,
+      name: sa.full_name || '',
+      email: sa.email || '',
+      password: '', // Blank by default on edit
+      roleId: roleIdMap[sa.role_name] || '2'
+    });
+    setShowSubAdminModal(true);
+  };
+
+  const handleSaveSubAdmin = async (e) => {
+    e.preventDefault();
+    try {
+      if (subAdminForm.id) {
+        await request(`/security/sub-admins/${subAdminForm.id}`, {
+          method: 'PUT',
+          body: {
+            name: subAdminForm.name,
+            email: subAdminForm.email,
+            password: subAdminForm.password || undefined,
+            roleId: subAdminForm.roleId
+          }
+        });
+        alert('Sub-admin account updated.');
+      } else {
+        await request('/security/sub-admins', {
+          method: 'POST',
+          body: {
+            name: subAdminForm.name,
+            email: subAdminForm.email,
+            password: subAdminForm.password,
+            roleId: subAdminForm.roleId
+          }
+        });
+        alert('Sub-admin account created.');
+      }
+      setShowSubAdminModal(false);
+      fetchData();
+    } catch (err) {
+      alert(err.message || 'Error saving sub-admin details.');
+    }
+  };
+
+  const handleToggleSubModule = (moduleKey, isChecked) => {
+    const idx = subAdminAccess.findIndex(sa => sa.module_key === moduleKey);
+    const newAccess = [...subAdminAccess];
+    if (idx >= 0) {
+      newAccess[idx] = { ...newAccess[idx], is_enabled: isChecked };
+    } else {
+      newAccess.push({
+        module_key: moduleKey,
+        is_enabled: isChecked,
+        subscription_start_date: null,
+        subscription_end_date: null,
+        feature_label: null
+      });
+    }
+    setSubAdminAccess(newAccess);
+  };
+
+  const handleSaveSubAdminPermissions = async (e) => {
+    e.preventDefault();
+    if (!selectedSubAdminId) return;
+    setSubAdminAccessSaving(true);
+    try {
+      await request(`/security/sub-admin-licensing/${selectedSubAdminId}`, {
+        method: 'PUT',
+        body: { modules: subAdminAccess }
+      });
+      alert('Sub-admin access rules updated successfully.');
+    } catch (err) {
+      alert(err.message || 'Failed to save sub-admin permissions.');
+    } finally {
+      setSubAdminAccessSaving(false);
+    }
+  };
 
   const handleSelectSubAdmin = async (userId) => {
     setSelectedSubAdminId(userId);
@@ -230,9 +325,12 @@ export default function SecurityCenter() {
         const obj = {};
         list.forEach(s => { obj[s.setting_key] = s.setting_value; });
         setSettings(obj);
-      } else if (activeTab === 'licensing') {
+      } else if (activeTab === 'subadmins' || activeTab === 'licensing') {
         const lic = await request('/security/licensing');
         setLicensingData(lic || { modules: [], admin_creation_limit: 3 });
+        if (lic?.admin_creation_limit !== undefined) {
+          setAdminCreationLimit(lic.admin_creation_limit);
+        }
         const userList = await request('/security/users');
         const subAdmins = (userList || []).filter(u => u.role_name !== 'Employee' && u.role_name !== 'Super Admin' && u.role_name !== 'Admin Controller');
         setSubAdminsList(subAdmins);
@@ -369,7 +467,10 @@ export default function SecurityCenter() {
           { key: 'users', name: 'Login Credentials', icon: Lock },
           { key: 'locations', name: 'Geofence Boundaries', icon: MapPin },
           { key: 'organization', name: 'Org Structure', icon: Building },
-          { key: 'settings', name: 'System Parameters', icon: Settings }
+          { key: 'settings', name: 'System Parameters', icon: Settings },
+          ...((user?.role === 'Super Admin' || user?.role === 'Admin Controller') ? [
+            { key: 'subadmins', name: 'Manage Sub-Admins', icon: Users }
+          ] : [])
         ].map(t => {
           const Icon = t.icon;
           return (
@@ -794,6 +895,186 @@ export default function SecurityCenter() {
               </div>
             )}
 
+            {/* 5. SUB-ADMINS MANAGEMENT */}
+            {activeTab === 'subadmins' && (
+              <div>
+                <div className="flex-between" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '16px' }}>
+                  <div>
+                    <h3 style={{ fontSize: '18px', margin: 0, color: 'var(--chub-purple)' }}>Sub-Admin Accounts</h3>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px' }}>
+                      Created: <strong>{subAdminsList.length}</strong> / <strong>{adminCreationLimit}</strong> limits set by Super Admin.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={handleOpenAddSubAdmin} 
+                    className="btn btn-primary"
+                    disabled={subAdminsList.length >= adminCreationLimit}
+                    title={subAdminsList.length >= adminCreationLimit ? "Sub-admin limit reached" : "Add new sub-admin"}
+                  >
+                    <Plus size={16} /> Create Sub-Admin
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', marginTop: '20px' }}>
+                  {/* Left Column: Sub-Admins list */}
+                  <div style={{ flex: 1.8, minWidth: '350px' }}>
+                    <div className="table-container">
+                      <table className="custom-table">
+                        <thead>
+                          <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {subAdminsList.length === 0 ? (
+                            <tr>
+                              <td colSpan="5" style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>
+                                No sub-admin accounts created yet.
+                              </td>
+                            </tr>
+                          ) : (
+                            subAdminsList.map((sa) => (
+                              <tr 
+                                key={sa.id} 
+                                style={{ 
+                                  cursor: 'pointer', 
+                                  backgroundColor: selectedSubAdminId === sa.id ? 'rgba(216, 90, 166, 0.05)' : 'transparent' 
+                                }}
+                                onClick={() => handleSelectSubAdmin(sa.id)}
+                              >
+                                <td style={{ fontWeight: 600 }}>{sa.full_name || 'N/A'}</td>
+                                <td>{sa.email}</td>
+                                <td><span className="badge badge-kyc-pending">{sa.role_name}</span></td>
+                                <td>
+                                  <span className={`badge ${sa.status === 'active' ? 'badge-active' : 'badge-inactive'}`}>
+                                    {sa.status}
+                                  </span>
+                                </td>
+                                <td onClick={(e) => e.stopPropagation()}>
+                                  <div style={{ display: 'flex', gap: '6px' }}>
+                                    <button 
+                                      onClick={() => handleOpenEditSubAdmin(sa)} 
+                                      className="btn btn-secondary"
+                                      style={{ padding: '4px 8px', border: 'none' }}
+                                      title="Edit details"
+                                    >
+                                      <Plus size={14} style={{ color: 'var(--chub-pink)' }} />
+                                    </button>
+                                    <button 
+                                      onClick={() => handleToggleUserStatus(sa.id, sa.status)} 
+                                      className="btn btn-secondary"
+                                      style={{ padding: '4px 8px', fontSize: '11px' }}
+                                    >
+                                      {sa.status === 'active' ? 'Pause' : 'Resume'}
+                                    </button>
+                                    <button 
+                                      onClick={() => handleHardDeleteUser(sa.id, sa.email)} 
+                                      className="btn btn-secondary"
+                                      style={{ padding: '4px 8px', border: 'none' }}
+                                      title="Terminate Sub-Admin"
+                                    >
+                                      <Trash2 size={14} style={{ color: 'var(--color-error)' }} />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Module Access Control */}
+                  <div style={{ flex: 1.2, minWidth: '280px' }}>
+                    <div className="card" style={{ border: '1px solid var(--border-color)', borderRadius: '12px', padding: '20px', backgroundColor: 'rgba(255, 255, 255, 0.02)' }}>
+                      <h4 style={{ fontSize: '16px', color: 'var(--chub-purple)', margin: '0 0 16px 0', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
+                        Module Access Settings
+                      </h4>
+                      {selectedSubAdminId ? (
+                        (() => {
+                          const currentSubAdmin = subAdminsList.find(sa => sa.id === selectedSubAdminId);
+                          const activeModules = (licensingData.modules || []).filter(m => m.is_enabled);
+                          
+                          return (
+                            <form onSubmit={handleSaveSubAdminPermissions}>
+                              <p style={{ fontSize: '13px', marginBottom: '16px', color: 'var(--text-muted)' }}>
+                                Configure access for: <strong>{currentSubAdmin?.full_name || currentSubAdmin?.email}</strong>
+                              </p>
+                              {activeModules.length === 0 ? (
+                                <p style={{ fontSize: '13px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                  No modules are currently licensed or enabled for the Admin Controller.
+                                </p>
+                              ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+                                  {activeModules.map((m) => {
+                                    const isChecked = subAdminAccess.some(sa => sa.module_key === m.module_key && sa.is_enabled);
+                                    
+                                    const moduleNameMap = {
+                                      dashboard: 'Dashboard',
+                                      employees: 'Employee Lifecycle',
+                                      attendance: 'Attendance Hub',
+                                      leaves: 'Leave Manager',
+                                      security: 'Security & Audits',
+                                      reports: 'Reports & Export'
+                                    };
+                                    
+                                    return (
+                                      <label 
+                                        key={m.module_key}
+                                        style={{ 
+                                          display: 'flex', 
+                                          alignItems: 'center', 
+                                          gap: '10px', 
+                                          cursor: 'pointer',
+                                          padding: '8px 12px',
+                                          borderRadius: '6px',
+                                          backgroundColor: 'rgba(255, 255, 255, 0.01)',
+                                          border: '1px solid rgba(255, 255, 255, 0.05)',
+                                          transition: 'all 0.2s'
+                                        }}
+                                      >
+                                        <input 
+                                          type="checkbox"
+                                          checked={isChecked}
+                                          onChange={(e) => handleToggleSubModule(m.module_key, e.target.checked)}
+                                          style={{ width: '16px', height: '16px', accentColor: 'var(--chub-pink)' }}
+                                        />
+                                        <span style={{ fontSize: '14px', fontWeight: 500 }}>
+                                          {moduleNameMap[m.module_key] || m.module_key}
+                                        </span>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                              <button 
+                                type="submit" 
+                                className="btn btn-primary"
+                                style={{ width: '100%', padding: '10px' }}
+                                disabled={subAdminAccessSaving || activeModules.length === 0}
+                              >
+                                {subAdminAccessSaving ? 'Saving access...' : 'Update Module Access'}
+                              </button>
+                            </form>
+                          );
+                        })()
+                      ) : (
+                        <div style={{ textAlign: 'center', padding: '30px 10px', color: 'var(--text-muted)' }}>
+                          <Users size={32} style={{ color: 'var(--chub-pink)', opacity: 0.5, marginBottom: '12px' }} />
+                          <p style={{ fontSize: '13px' }}>Select a sub-admin from the table to customize their module accessibility.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
 
 
           </div>
@@ -982,6 +1263,81 @@ export default function SecurityCenter() {
                 </button>
                 <button type="submit" className="btn btn-primary">
                   Save Designation
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ADD / EDIT SUB-ADMIN MODAL */}
+      {showSubAdminModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '400px' }}>
+            <h3 style={{ marginBottom: '20px' }}>
+              {subAdminForm.id ? 'Modify Sub-Admin Details' : 'Create New Sub-Admin'}
+            </h3>
+            <form onSubmit={handleSaveSubAdmin}>
+              <div className="form-group">
+                <label className="form-label">Full Name *</label>
+                <input 
+                  type="text" 
+                  className="form-control" 
+                  placeholder="Enter administrator name"
+                  value={subAdminForm.name}
+                  onChange={(e) => setSubAdminForm({ ...subAdminForm, name: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Email Address *</label>
+                <input 
+                  type="email" 
+                  className="form-control" 
+                  placeholder="e.g. name@company.com"
+                  value={subAdminForm.email}
+                  onChange={(e) => setSubAdminForm({ ...subAdminForm, email: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">
+                  {subAdminForm.id ? 'Update Password (Optional)' : 'Secure Password *'}
+                </label>
+                <input 
+                  type="password" 
+                  className="form-control" 
+                  placeholder={subAdminForm.id ? "Leave blank to keep current" : "Minimum 6 characters"}
+                  value={subAdminForm.password}
+                  onChange={(e) => setSubAdminForm({ ...subAdminForm, password: e.target.value })}
+                  required={!subAdminForm.id}
+                  minLength={6}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Assign System Role *</label>
+                <select 
+                  className="form-control" 
+                  value={subAdminForm.roleId}
+                  onChange={(e) => setSubAdminForm({ ...subAdminForm, roleId: e.target.value })}
+                  required
+                >
+                  <option value="2">Admin</option>
+                  <option value="3">HR Manager</option>
+                  <option value="4">Department Manager</option>
+                  <option value="5">Finance Manager</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+                <button type="button" onClick={() => setShowSubAdminModal(false)} className="btn btn-secondary">
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  {subAdminForm.id ? 'Save Changes' : 'Create Account'}
                 </button>
               </div>
             </form>

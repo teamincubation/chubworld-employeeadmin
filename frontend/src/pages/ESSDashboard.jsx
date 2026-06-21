@@ -94,7 +94,7 @@ export default function ESSDashboard() {
     );
   }
 
-  const name = profile?.employee?.full_name || profile?.user?.email.split('@')[0];
+  const name = profile?.employee?.full_name || profile?.user?.email?.split('@')[0] || '';
   const empId = profile?.employee?.employee_id || 'CHUB-EMP';
   const role = profile?.user?.role || 'Employee';
 

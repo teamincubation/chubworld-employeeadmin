@@ -167,6 +167,8 @@ router.get('/security/licensing', authenticateToken, securityController.getLicen
 router.put('/security/licensing', authenticateToken, securityController.updateLicensing);
 router.get('/security/sub-admin-licensing/:userId', authenticateToken, securityController.getSubAdminLicensing);
 router.put('/security/sub-admin-licensing/:userId', authenticateToken, securityController.updateSubAdminLicensing);
+router.post('/security/sub-admins', authenticateToken, requirePermission('role:manage'), securityController.createSubAdmin);
+router.put('/security/sub-admins/:userId', authenticateToken, requirePermission('role:manage'), securityController.updateSubAdmin);
 
 /* =========================================================================
    8. SECURE DOCUMENT RETRIEVAL (Permission validation before serving files)

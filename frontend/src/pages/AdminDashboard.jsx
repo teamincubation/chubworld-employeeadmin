@@ -9,13 +9,17 @@ import {
 import { Link } from 'react-router-dom';
 
 export default function AdminDashboard() {
-  const { request } = useAuth();
+  const { request, user } = useAuth();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [licensingInfo, setLicensingInfo] = useState(null);
 
   useEffect(() => {
     fetchStats();
+    if (user && user.role !== 'Super Admin' && user.role !== 'Employee') {
+      fetchLicensingInfo();
+    }
   }, []);
 
   const fetchStats = async () => {
@@ -29,6 +33,63 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchLicensingInfo = async () => {
+    try {
+      const data = await request('/security/licensing');
+      setLicensingInfo(data);
+    } catch (err) {
+      console.error('Error fetching licensing info on dashboard:', err);
+    }
+  };
+
+  const getExpirationAlerts = () => {
+    if (!licensingInfo || !licensingInfo.modules) return [];
+    
+    const now = new Date();
+    const currentDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const alerts = [];
+
+    licensingInfo.modules.forEach(m => {
+      if (!m.is_enabled) return;
+      if (m.subscription_end_date) {
+        const end = new Date(m.subscription_end_date);
+        const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+        
+        // Calculate difference in days
+        const diffTime = endDate - currentDate;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        const friendlyName = {
+          dashboard: 'Dashboard Module',
+          employees: 'Employee Lifecycle Module',
+          attendance: 'Attendance Hub Module',
+          leaves: 'Leave Manager Module',
+          security: 'Security & Audits Module',
+          reports: 'Reports Module'
+        }[m.module_key] || m.module_key.toUpperCase();
+
+        if (diffDays < 0) {
+          const formattedDate = new Date(m.subscription_end_date).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
+          alerts.push({
+            moduleKey: m.module_key,
+            type: 'expired',
+            message: `${friendlyName} expired on ${formattedDate}. Renew now by contacting developer.`,
+            whatsappText: `Hi Super Admin, the ${friendlyName} for C-Hub has expired on ${formattedDate}. Kindly help renew it.`
+          });
+        } else if (diffDays <= 10) {
+          alerts.push({
+            moduleKey: m.module_key,
+            type: 'warning',
+            message: `${friendlyName} expires in ${diffDays} days. Kindly contact developer to renew your plan.`,
+            whatsappText: `Hi Super Admin, the ${friendlyName} for C-Hub is expiring in ${diffDays} days. Kindly help renew it.`
+          });
+        }
+      }
+    });
+
+    return alerts;
   };
 
   if (loading) {
@@ -49,9 +110,62 @@ export default function AdminDashboard() {
   }
 
   const { employees, attendance, departments, recentActivities, securityAlerts } = stats;
+  const expirationAlerts = getExpirationAlerts();
 
   return (
     <div>
+      {/* Licensing Expiration Notification Bars */}
+      {expirationAlerts.map((alert, idx) => (
+        <div 
+          key={idx} 
+          className="card" 
+          style={{
+            background: alert.type === 'expired' ? 'linear-gradient(135deg, #7f1d1d 0%, #991b1b 100%)' : 'linear-gradient(135deg, #78350f 0%, #92400e 100%)',
+            color: '#FFFFFF',
+            padding: '16px 20px',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px',
+            border: 'none',
+            borderRadius: '12px',
+            boxShadow: '0 4px 15px rgba(0, 0, 0, 0.15)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <AlertTriangle size={20} style={{ color: alert.type === 'expired' ? '#fca5a5' : '#fde047', flexShrink: 0 }} />
+            <span style={{ fontSize: '14px', fontWeight: 500 }}>{alert.message}</span>
+          </div>
+          <a 
+            href={`https://wa.me/916282563209?text=${encodeURIComponent(alert.whatsappText)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn"
+            style={{
+              backgroundColor: '#25D366',
+              color: '#FFFFFF',
+              border: 'none',
+              padding: '8px 16px',
+              fontSize: '13px',
+              fontWeight: 600,
+              borderRadius: '8px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              textDecoration: 'none'
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style={{ flexShrink: 0 }}>
+              <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.5-5.739-1.453L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.625 1.451 5.437 0 9.862-4.407 9.866-9.827.002-2.623-1.013-5.091-2.86-6.944-1.847-1.853-4.305-2.873-6.93-2.875-5.441 0-9.868 4.41-9.873 9.83-.002 2.03.541 4.021 1.57 5.751l-.995 3.636 3.73-.974-.133-.072zm9.117-6.248c-.28-.14-1.65-.815-1.906-.907-.256-.094-.443-.14-.63.14-.186.28-.722.907-.885 1.092-.163.186-.326.21-.606.07-.28-.14-1.18-.435-2.25-1.39-1.07-.954-1.802-2.133-2.012-2.483-.21-.35-.022-.54.153-.715.157-.156.35-.407.525-.61.175-.203.233-.35.35-.583.116-.233.058-.44-.029-.61-.088-.17-.722-1.748-.99-2.395-.26-.63-.527-.545-.722-.555-.186-.01-.4-.01-.613-.01-.213 0-.56.08-.853.407-.293.326-1.12 1.096-1.12 2.67 0 1.575 1.147 3.096 1.307 3.307.16.21 2.256 3.446 5.467 4.834.764.33 1.36.527 1.824.674.768.243 1.467.209 2.02.127.618-.093 1.651-.675 1.884-1.328.233-.653.233-1.213.163-1.328-.07-.116-.256-.186-.536-.326z"/>
+            </svg>
+            Contact Developer
+          </a>
+        </div>
+      ))}
+
       {/* Header and Quick Actions */}
       <div className="flex-between m-b-20">
         <div>
