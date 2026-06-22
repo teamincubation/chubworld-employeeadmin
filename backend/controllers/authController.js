@@ -36,7 +36,7 @@ async function recordLoginHistory(userId, email, ip, userAgent, status, remarks)
 const authController = {
   // Login Endpoint
   login: async (req, res) => {
-    const { email, password } = req.body;
+    const { email, password, portal } = req.body;
     const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
     const userAgent = req.headers['user-agent'] || 'Unknown';
 
@@ -58,6 +58,19 @@ const authController = {
 
       const user = users[0];
       const roleName = user.roles ? user.roles.name : '';
+
+      // Enforce portal role-based access validation
+      if (portal === 'employee') {
+        if (roleName !== 'Employee') {
+          await recordLoginHistory(user.id, email, ip, userAgent, 'Failed', 'Admin attempting ESS login');
+          return res.status(403).json({ message: 'Administrators must log in via the Administrative Portal.' });
+        }
+      } else {
+        if (roleName === 'Employee') {
+          await recordLoginHistory(user.id, email, ip, userAgent, 'Failed', 'Employee attempting Admin login');
+          return res.status(403).json({ message: 'Employees must log in via the Employee ESS Portal.' });
+        }
+      }
 
       // Emergency lockdown check
       if (roleName !== 'Super Admin') {

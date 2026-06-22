@@ -27,6 +27,7 @@ import ESSLeaveRequest from './pages/ESSLeaveRequest';
 import ESSPerformance from './pages/ESSPerformance';
 import ESSProfile from './pages/ESSProfile';
 import ESSLayoutShell from './components/ESSLayoutShell';
+import ESSLogin from './pages/ESSLogin';
 
 function LayoutShell({ children }) {
   return (
@@ -71,9 +72,10 @@ function MainAppRouter() {
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/ess-login" element={<ESSLogin />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<Navigate to="/ess-login" replace />} />
       </Routes>
     );
   }

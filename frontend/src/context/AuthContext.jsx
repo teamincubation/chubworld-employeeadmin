@@ -56,11 +56,11 @@ export function AuthProvider({ children }) {
   };
 
 
-  const login = async (email, password) => {
+  const login = async (email, password, portal = 'admin') => {
     const res = await fetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ email, password, portal })
     });
 
     const data = await res.json();
