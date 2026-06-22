@@ -19,6 +19,9 @@ export default function SecurityCenter() {
   const [holidays, setHolidays] = useState([]);
   const [holidayYear, setHolidayYear] = useState(new Date().getFullYear());
   const [ipLocations, setIpLocations] = useState({});
+  const [showAuditMapModal, setShowAuditMapModal] = useState(false);
+  const [selectedAuditLog, setSelectedAuditLog] = useState(null);
+  const [selectedAuditLoc, setSelectedAuditLoc] = useState(null);
   const [departments, setDepartments] = useState([]);
   const [designations, setDesignations] = useState([]);
   const [selectedDeptFilter, setSelectedDeptFilter] = useState('');
@@ -227,7 +230,11 @@ export default function SecurityCenter() {
             if (res.ok) {
               const data = await res.json();
               if (data.cityName && data.countryName) {
-                newLocs[ip] = `${data.cityName}, ${data.countryName}`;
+                newLocs[ip] = {
+                  name: `${data.cityName}, ${data.countryName}`,
+                  latitude: data.latitude,
+                  longitude: data.longitude
+                };
                 locationResolved = true;
                 updated = true;
               }
@@ -242,7 +249,11 @@ export default function SecurityCenter() {
               if (res.ok) {
                 const data = await res.json();
                 if (data.city && data.country_name) {
-                  newLocs[ip] = `${data.city}, ${data.country_name}`;
+                  newLocs[ip] = {
+                    name: `${data.city}, ${data.country_name}`,
+                    latitude: data.latitude,
+                    longitude: data.longitude
+                  };
                   locationResolved = true;
                   updated = true;
                 }
@@ -253,7 +264,11 @@ export default function SecurityCenter() {
           }
 
           if (!locationResolved) {
-            newLocs[ip] = 'Unknown Location';
+            newLocs[ip] = {
+              name: 'Unknown Location',
+              latitude: null,
+              longitude: null
+            };
             updated = true;
           }
         }
@@ -807,8 +822,41 @@ export default function SecurityCenter() {
                                 {log.ip_address === '127.0.0.1' || log.ip_address === '::1' || log.ip_address === '::ffff:127.0.0.1' ? (
                                   <span className="badge badge-inactive">Localhost</span>
                                 ) : (
-                                  <span className="badge badge-active" style={{ fontSize: '11px', fontWeight: 600, color: 'var(--chub-purple)' }}>
-                                    {ipLocations[log.ip_address] || 'Resolving...'}
+                                  <span 
+                                    className="badge badge-active" 
+                                    style={{ 
+                                      fontSize: '11px', 
+                                      fontWeight: 600, 
+                                      color: 'var(--chub-purple)',
+                                      cursor: ipLocations[log.ip_address]?.latitude ? 'pointer' : 'default',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      transition: 'all 0.2s ease',
+                                      border: '1px solid transparent'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      if (ipLocations[log.ip_address]?.latitude) {
+                                        e.currentTarget.style.borderColor = 'var(--chub-pink)';
+                                        e.currentTarget.style.transform = 'scale(1.03)';
+                                      }
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.borderColor = 'transparent';
+                                      e.currentTarget.style.transform = 'scale(1)';
+                                    }}
+                                    onClick={() => {
+                                      const loc = ipLocations[log.ip_address];
+                                      if (loc && loc.latitude) {
+                                        setSelectedAuditLog(log);
+                                        setSelectedAuditLoc(loc);
+                                        setShowAuditMapModal(true);
+                                      }
+                                    }}
+                                    title={ipLocations[log.ip_address]?.latitude ? "Click to view Google Maps location" : "IP Location details"}
+                                  >
+                                    <MapPin size={10} style={{ flexShrink: 0 }} />
+                                    {ipLocations[log.ip_address]?.name || ipLocations[log.ip_address] || 'Resolving...'}
                                   </span>
                                 )}
                               </td>
@@ -2094,6 +2142,54 @@ export default function SecurityCenter() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* AUDIT MAP MODAL */}
+      {showAuditMapModal && selectedAuditLog && selectedAuditLoc && (
+        <div className="modal-overlay" onClick={() => setShowAuditMapModal(false)}>
+          <div className="modal-content" style={{ maxWidth: '480px', width: '90%' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '20px' }}>
+              <h3 style={{ margin: 0, textTransform: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <MapPin size={20} style={{ color: 'var(--chub-pink)' }} />
+                Audit Log Location
+              </h3>
+              <button 
+                onClick={() => setShowAuditMapModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: 'var(--text-muted)', lineHeight: '1' }}
+              >
+                &times;
+              </button>
+            </div>
+
+            <div style={{ fontSize: '13px', marginBottom: '16px', lineHeight: '1.5', color: 'var(--text-muted)' }}>
+              <div><strong>Action Type:</strong> {selectedAuditLog.action_type}</div>
+              <div><strong>Performed By:</strong> {selectedAuditLog.performed_by} ({selectedAuditLog.role})</div>
+              <div><strong>IP Address:</strong> {selectedAuditLog.ip_address}</div>
+              <div><strong>Resolved Location:</strong> {selectedAuditLoc.name}</div>
+              {selectedAuditLoc.latitude && (
+                <div><strong>Coordinates:</strong> {selectedAuditLoc.latitude}, {selectedAuditLoc.longitude}</div>
+              )}
+            </div>
+
+            {selectedAuditLoc.latitude && (
+              <iframe
+                title="Audit Location Map"
+                width="100%"
+                height="280"
+                style={{ border: '1px solid var(--border-color)', borderRadius: '12px' }}
+                loading="lazy"
+                allowFullScreen
+                src={`https://maps.google.com/maps?q=${selectedAuditLoc.latitude},${selectedAuditLoc.longitude}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
+              />
+            )}
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+              <button onClick={() => setShowAuditMapModal(false)} className="btn btn-secondary" style={{ padding: '8px 24px' }}>
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
