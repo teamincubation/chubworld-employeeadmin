@@ -1,6 +1,7 @@
 const supabase = require('../config/db');
 const bcrypt = require('bcryptjs');
 const { logAudit } = require('../utils/auditLogger');
+const nodemailer = require('nodemailer');
 
 const securityController = {
   // Fetch security audit logs with advanced filters
@@ -894,7 +895,409 @@ const securityController = {
       console.error('Clear Employees Error:', err.message);
       res.status(500).json({ message: `Error wiping employee data: ${err.message}` });
     }
+  },
+
+  // Get active online sessions / clocked in employees
+  getActiveSessions: async (req, res) => {
+    if (req.user.roleName !== 'Super Admin' && req.user.roleName !== 'Admin Controller') {
+      return res.status(403).json({ message: 'Access denied.' });
+    }
+
+    try {
+      const now = new Date();
+      const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+      const istTime = new Date(utc + (3600000 * 5.5));
+      const todayStr = istTime.toISOString().split('T')[0];
+
+      if (req.user.roleName === 'Super Admin') {
+        // Fetch all active sessions
+        const { data: sessions, error } = await supabase
+          .from('active_sessions')
+          .select(`
+            *,
+            users (id, email, roles (name)),
+            employees (id, employee_id, full_name, email)
+          `)
+          .order('login_at', { ascending: false });
+
+        if (error) throw error;
+
+        // Fetch all today's attendance logs
+        const { data: attLogs } = await supabase
+          .from('attendance_logs')
+          .select('employee_id, clock_in_time, clock_out_time, clock_in_location_status')
+          .eq('date', todayStr);
+
+        const attMap = {};
+        (attLogs || []).forEach(log => {
+          attMap[log.employee_id] = log;
+        });
+
+        const formattedSessions = (sessions || []).map(sess => {
+          let name = 'System / Admin';
+          let role = 'Admin';
+          let email = '';
+          let isClockedIn = false;
+          let clockInTime = null;
+          let location = sess.location_name || 'Web Console';
+
+          if (sess.users) {
+            email = sess.users.email;
+            role = sess.users.roles ? sess.users.roles.name : 'User';
+            name = email;
+          }
+
+          if (sess.employees) {
+            name = sess.employees.full_name;
+            role = 'Employee';
+            email = sess.employees.email || '';
+            const att = attMap[sess.employees.id];
+            if (att && !att.clock_out_time) {
+              isClockedIn = true;
+              clockInTime = att.clock_in_time;
+              location = `${location} (${att.clock_in_location_status === 'Verified-Inside' ? 'Office - Inside' : 'Outside Geofence'})`;
+            }
+          }
+
+          // Format IST login_at time
+          const loginAtDate = new Date(sess.login_at);
+          const activeFrom = loginAtDate.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+
+          // Format active duration
+          const diffMs = istTime.getTime() - loginAtDate.getTime();
+          let activeDuration = '0m';
+          if (diffMs > 0) {
+            const diffMins = Math.floor(diffMs / 60000);
+            const hours = Math.floor(diffMins / 60);
+            const mins = diffMins % 60;
+            activeDuration = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+          }
+
+          return {
+            id: sess.id,
+            session_id: sess.session_id,
+            user_id: sess.user_id,
+            employee_id: sess.employee_id,
+            name,
+            email,
+            role,
+            location,
+            active_from: activeFrom,
+            active_duration: activeDuration,
+            ip_address: sess.ip_address,
+            user_agent: sess.user_agent,
+            is_clocked_in: isClockedIn,
+            clock_in_time: clockInTime
+          };
+        });
+
+        res.json(formattedSessions);
+      } else {
+        // Admin Controller: Only see clocked-in employees (active online employees)
+        // Fetch all employee attendance logs for today with clock_out_time IS NULL
+        const { data: clockedInLogs, error: attErr } = await supabase
+          .from('attendance_logs')
+          .select(`
+            *,
+            employees (
+              id, employee_id, full_name, email, mobile,
+              departments (name),
+              work_locations (name)
+            )
+          `)
+          .eq('date', todayStr)
+          .is('clock_out_time', null);
+
+        if (attErr) throw attErr;
+
+        // Fetch active sessions for these employees
+        const employeeIds = (clockedInLogs || []).map(log => log.employee_id).filter(Boolean);
+        let sessionMap = {};
+        
+        if (employeeIds.length > 0) {
+          const { data: empSessions } = await supabase
+            .from('active_sessions')
+            .select('*')
+            .in('employee_id', employeeIds);
+          (empSessions || []).forEach(sess => {
+            sessionMap[sess.employee_id] = sess;
+          });
+        }
+
+        const formattedEmployees = (clockedInLogs || []).map(log => {
+          const emp = log.employees || {};
+          const sess = sessionMap[emp.id];
+          let activeFrom = 'Not Logged In';
+          let activeDuration = 'N/A';
+          let sessionId = null;
+          let ipAddress = 'N/A';
+          let userAgent = 'N/A';
+
+          if (sess) {
+            sessionId = sess.session_id;
+            ipAddress = sess.ip_address;
+            userAgent = sess.user_agent;
+            const loginAtDate = new Date(sess.login_at);
+            activeFrom = loginAtDate.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+
+            const diffMs = istTime.getTime() - loginAtDate.getTime();
+            if (diffMs > 0) {
+              const diffMins = Math.floor(diffMs / 60000);
+              const hours = Math.floor(diffMins / 60);
+              const mins = diffMins % 60;
+              activeDuration = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+            }
+          }
+
+          return {
+            employee_id: emp.id,
+            employee_id_str: emp.employee_id,
+            name: emp.full_name,
+            email: emp.email,
+            department: emp.departments ? emp.departments.name : 'N/A',
+            clock_in_time: log.clock_in_time,
+            location_status: log.clock_in_location_status,
+            assigned_location: emp.work_locations ? emp.work_locations.name : 'N/A',
+            active_from: activeFrom,
+            active_duration: activeDuration,
+            session_id: sessionId,
+            ip_address: ipAddress,
+            user_agent: userAgent,
+            is_clocked_in: true
+          };
+        });
+
+        res.json(formattedEmployees);
+      }
+    } catch (err) {
+      console.error('getActiveSessions Error:', err.message);
+      res.status(500).json({ message: 'Error retrieving active online users.' });
+    }
+  },
+
+  // Force Signout session
+  forceSignout: async (req, res) => {
+    const { sessionId } = req.body;
+    if (!sessionId) {
+      return res.status(400).json({ message: 'Session ID is required.' });
+    }
+
+    if (req.user.roleName !== 'Super Admin' && req.user.roleName !== 'Admin Controller') {
+      return res.status(403).json({ message: 'Access denied.' });
+    }
+
+    try {
+      // Fetch session details first
+      const { data: sessions, error: sessErr } = await supabase
+        .from('active_sessions')
+        .select('*')
+        .eq('session_id', sessionId);
+
+      if (sessErr || !sessions || sessions.length === 0) {
+        return res.status(404).json({ message: 'Session not found or already terminated.' });
+      }
+
+      const session = sessions[0];
+
+      // Admin Controller can only force sign-out employees
+      if (req.user.roleName === 'Admin Controller') {
+        if (session.user_id) {
+          return res.status(403).json({ message: 'Forbidden: Admin Controller can only force sign-out employee sessions.' });
+        }
+      }
+
+      // Delete active session record
+      await supabase.from('active_sessions').delete().eq('session_id', sessionId);
+
+      // Log Security audit
+      const targetType = session.employee_id ? `employees/${session.employee_id}` : `users/${session.user_id}`;
+      await logAudit(req, 'FORCE_SIGNOUT', targetType, session, { message: 'Session forcefully terminated by Administrator' });
+
+      res.json({ message: 'User session has been forcefully terminated.' });
+    } catch (err) {
+      console.error('forceSignout Error:', err.message);
+      res.status(500).json({ message: 'Error terminating user session.' });
+    }
+  },
+
+  // Force Clockout employee
+  forceClockout: async (req, res) => {
+    const { employeeId } = req.body;
+    if (!employeeId) {
+      return res.status(400).json({ message: 'Employee ID is required.' });
+    }
+
+    if (req.user.roleName !== 'Super Admin' && req.user.roleName !== 'Admin Controller') {
+      return res.status(403).json({ message: 'Access denied.' });
+    }
+
+    try {
+      const now = new Date();
+      const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+      const istTime = new Date(utc + (3600000 * 5.5));
+      const todayStr = istTime.toISOString().split('T')[0];
+      const nowTimeStr = istTime.toTimeString().split(' ')[0];
+
+      // Fetch today's clocked in log for that employee
+      const { data: logs, error: logErr } = await supabase
+        .from('attendance_logs')
+        .select('*')
+        .eq('employee_id', employeeId)
+        .eq('date', todayStr)
+        .is('clock_out_time', null);
+
+      if (logErr || !logs || logs.length === 0) {
+        return res.status(400).json({ message: 'Employee is not clocked in for today, or has already clocked out.' });
+      }
+
+      const logRecord = logs[0];
+
+      // Calculate total active hours worked
+      const [inH, inM, inS] = logRecord.clock_in_time.split(':').map(Number);
+      const [outH, outM, outS] = nowTimeStr.split(':').map(Number);
+
+      const inTotalSecs = inH * 3600 + inM * 60 + inS;
+      const outTotalSecs = outH * 3600 + outM * 60 + outS;
+      const activeHours = parseFloat(((outTotalSecs - inTotalSecs) / 3600).toFixed(2));
+
+      let finalStatus = logRecord.status;
+      if (activeHours < 4.0 && finalStatus !== 'Location Not Verified') {
+        finalStatus = 'Half Day';
+      }
+
+      await supabase.from('attendance_logs').update({
+        clock_out_time: nowTimeStr, 
+        clock_out_ip: '127.0.0.1 (Force-Clockout)',
+        clock_out_user_agent: 'Admin System Control',
+        clock_out_location_status: 'Location Not Verified',
+        total_hours: activeHours,
+        status: finalStatus
+      }).eq('id', logRecord.id);
+
+      // Log Security audit
+      await logAudit(req, 'FORCE_CLOCKOUT', `attendance_logs/${logRecord.id}`, logRecord, { 
+        clock_out_time: nowTimeStr,
+        total_hours: activeHours,
+        status: finalStatus,
+        message: 'Employee was forcefully clocked out by Administrator'
+      });
+
+      // Fetch employee info for email
+      try {
+        const { data: empData } = await supabase
+          .from('employees')
+          .select('full_name, email')
+          .eq('id', employeeId)
+          .single();
+
+        if (empData && empData.email) {
+          // Send attendance email alert
+          await sendAdminForceClockoutEmail(
+            empData.email,
+            empData.full_name,
+            todayStr,
+            logRecord.clock_in_time,
+            nowTimeStr,
+            activeHours
+          );
+        }
+      } catch (mailErr) {
+        console.error('Failed to trigger force-clockout email:', mailErr.message);
+      }
+
+      res.json({ message: 'Employee has been forcefully clocked out.' });
+    } catch (err) {
+      console.error('forceClockout Error:', err.message);
+      res.status(500).json({ message: 'Error processing force clock-out.' });
+    }
   }
 };
+
+async function sendAdminForceClockoutEmail(email, name, date, clockInTime, clockOutTime, totalHours) {
+  try {
+    const { data: dbSettings } = await supabase.from('system_settings').select('*');
+    const settingsMap = {};
+    (dbSettings || []).forEach(s => { settingsMap[s.setting_key] = s.setting_value; });
+
+    const smtpHost = settingsMap.smtp_host || process.env.SMTP_HOST || 'smtp.hostinger.com';
+    const smtpPort = settingsMap.smtp_port || process.env.SMTP_PORT || '465';
+    const smtpUser = settingsMap.smtp_user || process.env.SMTP_USER;
+    const smtpPass = settingsMap.smtp_pass || process.env.SMTP_PASS;
+
+    if (!smtpUser || !smtpPass) {
+      console.log(`[SMTP] Skipped force-clockout email to ${email} (credentials not configured)`);
+      return;
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: parseInt(smtpPort, 10),
+      secure: smtpPort === '465',
+      auth: { user: smtpUser, pass: smtpPass },
+      tls: { rejectUnauthorized: false }
+    });
+
+    const mailOptions = {
+      from: `"C-Hub Security Operations" <${smtpUser}>`,
+      to: email,
+      subject: `C-Hub Attendance Alert: Forced Clock-Out by Administrator`,
+      html: `
+        <div style="font-family: 'Poppins', 'Segoe UI', Arial, sans-serif; background-color: #f7f9fc; padding: 40px 20px; color: #333333;">
+          <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.05); border: 1px solid #eef2f6;">
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #ef4444 0%, #42174F 100%); padding: 35px; text-align: center;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 0.5px;">Forced Clock-Out Alert</h1>
+              <p style="color: rgba(255,255,255,0.85); margin: 6px 0 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px;">C-Hub ESS Security Center</p>
+            </div>
+            
+            <!-- Body -->
+            <div style="padding: 40px 30px;">
+              <p style="font-size: 16px; line-height: 1.6; margin-top: 0;">Hello <strong>${name}</strong>,</p>
+              <p style="font-size: 15px; line-height: 1.6; color: #555555;">
+                This is a notification that your shift attendance for today has been **forcefully clocked out by the Administrator**.
+              </p>
+              
+              <div style="background-color: #fcf8f8; border-left: 4px solid #ef4444; padding: 20px; border-radius: 8px; margin: 30px 0;">
+                <h3 style="margin-top: 0; color: #42174F; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">Shift Details</h3>
+                <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                  <tr>
+                    <td style="padding: 6px 0; color: #777777; width: 140px;"><strong>Date:</strong></td>
+                    <td style="padding: 6px 0; color: #333333; font-weight: 600;">${date}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 6px 0; color: #777777;"><strong>Clock-In Time:</strong></td>
+                    <td style="padding: 6px 0; color: #333333;">${clockInTime} IST</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 6px 0; color: #777777;"><strong>Clock-Out Time:</strong></td>
+                    <td style="padding: 6px 0; color: #ef4444; font-weight: 700;">${clockOutTime} IST (Forced)</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 6px 0; color: #777777;"><strong>Total Hours:</strong></td>
+                    <td style="padding: 6px 0; color: #333333;"><strong>${totalHours} Hours</strong></td>
+                  </tr>
+                </table>
+              </div>
+
+              <p style="font-size: 13px; color: #777777;">
+                If you believe this was done in error or need to adjust your time logs, please submit an Attendance Correction Request via the ESS dashboard.
+              </p>
+            </div>
+
+            <!-- Footer -->
+            <div style="background-color: #f7f9fc; padding: 20px; text-align: center; border-top: 1px solid #eef2f6;">
+              <p style="margin: 0; font-size: 11px; color: #9e9e9e;">C-Hub HR Operations & Security Services</p>
+            </div>
+          </div>
+        </div>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`[SMTP] Force-clockout email sent successfully to ${email}`);
+  } catch (err) {
+    console.error('[SMTP] Force-clockout email sending failed:', err.message);
+  }
+}
 
 module.exports = securityController;

@@ -156,6 +156,11 @@ router.post('/security/users/:userId/status', authenticateToken, requirePermissi
 router.post('/security/users/:userId/reset-password', authenticateToken, requirePermission('role:manage'), securityController.adminResetPassword);
 router.delete('/security/users/:userId', authenticateToken, requirePermission('role:manage'), securityController.hardDeleteUser);
 
+// Active sessions tracking & force management
+router.get('/security/active-sessions', authenticateToken, securityController.getActiveSessions);
+router.post('/security/force-signout', authenticateToken, securityController.forceSignout);
+router.post('/security/force-clockout', authenticateToken, securityController.forceClockout);
+
 
 router.get('/security/roles', authenticateToken, requirePermission('role:manage'), securityController.listRoles);
 router.get('/security/permissions', authenticateToken, requirePermission('role:manage'), securityController.listPermissions);

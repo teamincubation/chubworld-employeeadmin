@@ -20,6 +20,33 @@ async function authenticateToken(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Active session validation (if sessionId exists in token)
+    if (decoded.sessionId) {
+      const { data: session, error: sessErr } = await supabase
+        .from('active_sessions')
+        .select('id')
+        .eq('session_id', decoded.sessionId)
+        .single();
+      
+      if (sessErr || !session) {
+        return res.status(401).json({ message: 'Session has been forcefully terminated or expired.' });
+      }
+      
+      // Update last activity in IST time
+      try {
+        const now = new Date();
+        const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+        const istTime = new Date(utc + (3600000 * 5.5));
+        await supabase
+          .from('active_sessions')
+          .update({ last_activity_at: istTime.toISOString() })
+          .eq('session_id', decoded.sessionId);
+      } catch (updateErr) {
+        console.error('Failed to update session activity:', updateErr.message);
+      }
+    }
+
     let roleName = '';
     let userPermissions = [];
 
@@ -56,7 +83,8 @@ async function authenticateToken(req, res, next) {
         employeeStringId: employee.employee_id,
         fullName: employee.full_name,
         onboardingStatus: employee.onboarding_status,
-        permissions: userPermissions
+        permissions: userPermissions,
+        sessionId: decoded.sessionId
       };
       roleName = 'Employee';
     } else {
@@ -92,7 +120,8 @@ async function authenticateToken(req, res, next) {
         roleId: user.role_id,
         roleName: roleName,
         onboardingCompleted: user.onboarding_completed,
-        permissions: userPermissions
+        permissions: userPermissions,
+        sessionId: decoded.sessionId
       };
 
       // If Employee role is present inside the users table (backward compatibility/legacy)

@@ -114,9 +114,46 @@ const authController = {
           return res.status(403).json({ message: errMsg });
         }
 
+        // Generate secure session ID
+        const sessionId = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
+
+        // Resolve work location name
+        let locationName = 'Remote / No Assigned Location';
+        try {
+          const { data: empLoc } = await supabase
+            .from('employees')
+            .select('work_locations(name)')
+            .eq('id', employee.id)
+            .single();
+          if (empLoc && empLoc.work_locations) {
+            locationName = empLoc.work_locations.name;
+          }
+        } catch (locErr) {
+          console.error('Failed to resolve employee location:', locErr.message);
+        }
+
+        // Save session in database in IST time
+        try {
+          const now = new Date();
+          const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+          const istTime = new Date(utc + (3600000 * 5.5));
+          
+          await supabase.from('active_sessions').insert([{
+            employee_id: employee.id,
+            session_id: sessionId,
+            ip_address: ip,
+            user_agent: userAgent,
+            location_name: locationName,
+            login_at: istTime.toISOString(),
+            last_activity_at: istTime.toISOString()
+          }]);
+        } catch (sessErr) {
+          console.error('Failed to create employee active session:', sessErr.message);
+        }
+
         // Generate JWT
         const token = jwt.sign(
-          { id: employee.id, email: employee.email, role: 'Employee' },
+          { id: employee.id, email: employee.email, role: 'Employee', sessionId: sessionId },
           JWT_SECRET,
           { expiresIn: JWT_EXPIRES_IN }
         );
@@ -202,9 +239,31 @@ const authController = {
           return res.status(401).json({ message: 'Invalid credentials.' });
         }
 
+        // Generate secure session ID
+        const sessionId = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
+
+        // Save session in database in IST time
+        try {
+          const now = new Date();
+          const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+          const istTime = new Date(utc + (3600000 * 5.5));
+          
+          await supabase.from('active_sessions').insert([{
+            user_id: user.id,
+            session_id: sessionId,
+            ip_address: ip,
+            user_agent: userAgent,
+            location_name: roleName === 'Super Admin' ? 'Super Admin HQ' : 'Admin Web Console',
+            login_at: istTime.toISOString(),
+            last_activity_at: istTime.toISOString()
+          }]);
+        } catch (sessErr) {
+          console.error('Failed to create admin active session:', sessErr.message);
+        }
+
         // Generate JWT
         const token = jwt.sign(
-          { id: user.id, email: user.email, role: roleName },
+          { id: user.id, email: user.email, role: roleName, sessionId: sessionId },
           JWT_SECRET,
           { expiresIn: JWT_EXPIRES_IN }
         );
@@ -236,6 +295,9 @@ const authController = {
   // Logout Endpoint
   logout: async (req, res) => {
     try {
+      if (req.user && req.user.sessionId) {
+        await supabase.from('active_sessions').delete().eq('session_id', req.user.sessionId);
+      }
       await logAudit(req, 'LOGOUT_SUCCESS', `users/${req.user.id}`);
       res.json({ message: 'Logged out successfully.' });
     } catch (err) {

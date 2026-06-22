@@ -325,26 +325,28 @@ const leaveController = {
 
       await logAudit(req, `LEAVE_REQUEST_${status.toUpperCase()}`, `leave_requests/${id}`, request, { status, remarks });
 
-      // Trigger leave status update email
+      // Send leave status email notification to employee
       try {
-        const { data: empUser } = await supabase
+        const { data: employee } = await supabase
           .from('employees')
-          .select('full_name, users(email)')
+          .select('full_name, email')
           .eq('id', request.employee_id)
           .single();
-
-        if (empUser && empUser.users) {
-          const { data: lt } = await supabase.from('leave_types').select('code').eq('id', request.leave_type_id).single();
+        if (employee && employee.email) {
+          const { data: lt } = await supabase
+            .from('leave_types')
+            .select('code')
+            .eq('id', request.leave_type_id)
+            .single();
           const leaveCode = lt ? lt.code : 'Leave';
-          
-          sendLeaveStatusEmail(
-            empUser.users.email, 
-            empUser.full_name, 
-            leaveCode, 
-            request.total_days, 
-            request.from_date, 
-            request.to_date, 
-            status, 
+          await sendLeaveStatusEmail(
+            employee.email,
+            employee.full_name,
+            leaveCode,
+            request.total_days,
+            request.from_date,
+            request.to_date,
+            status,
             remarks
           );
         }

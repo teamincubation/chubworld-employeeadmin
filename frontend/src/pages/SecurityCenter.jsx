@@ -28,6 +28,7 @@ export default function SecurityCenter() {
   
   // Tab control
   const [activeTab, setActiveTab] = useState('audits'); // 'audits', 'users', 'locations', 'settings', 'subadmins'
+  const [sessionsList, setSessionsList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -326,6 +327,9 @@ export default function SecurityCenter() {
         const obj = {};
         list.forEach(s => { obj[s.setting_key] = s.setting_value; });
         setSettings(obj);
+      } else if (activeTab === 'sessions') {
+        const list = await request('/security/active-sessions');
+        setSessionsList(list || []);
       } else if (activeTab === 'subadmins' || activeTab === 'licensing') {
         const lic = await request('/security/licensing');
         setLicensingData(lic || { modules: [], admin_creation_limit: 3 });
@@ -468,6 +472,48 @@ export default function SecurityCenter() {
     }
   };
 
+  const handleForceSignout = async (sessionId, name) => {
+    if (!sessionId) return;
+    if (!window.confirm(`Are you sure you want to FORCE SIGN-OUT user "${name}"?\nThis will immediately terminate their current session and log them out.`)) return;
+
+    try {
+      setLoading(true);
+      await request('/security/force-signout', {
+        method: 'POST',
+        body: { sessionId }
+      });
+      alert(`User "${name}" has been forcefully signed out.`);
+      // Refresh session list
+      const list = await request('/security/active-sessions');
+      setSessionsList(list || []);
+    } catch (err) {
+      alert(err.message || 'Error forcing sign-out.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForceClockout = async (employeeId, name) => {
+    if (!employeeId) return;
+    if (!window.confirm(`Are you sure you want to FORCE CLOCK-OUT employee "${name}"?\nThis will end their attendance shift log for today.`)) return;
+
+    try {
+      setLoading(true);
+      await request('/security/force-clockout', {
+        method: 'POST',
+        body: { employeeId }
+      });
+      alert(`Employee "${name}" has been forcefully clocked out.`);
+      // Refresh session list
+      const list = await request('/security/active-sessions');
+      setSessionsList(list || []);
+    } catch (err) {
+      alert(err.message || 'Error forcing clock-out.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div>
       {/* Header */}
@@ -487,6 +533,7 @@ export default function SecurityCenter() {
           { key: 'organization', name: 'Org Structure', icon: Building },
           { key: 'settings', name: 'System Parameters', icon: Settings },
           ...((user?.role === 'Super Admin' || user?.role === 'Admin Controller') ? [
+            { key: 'sessions', name: 'Active Sessions', icon: ShieldAlert },
             { key: 'subadmins', name: 'Manage Sub-Admins', icon: Users }
           ] : [])
         ].map(t => {
@@ -641,6 +688,136 @@ export default function SecurityCenter() {
                       </table>
                     </div>
                   </>
+                )}
+              </div>
+            )}
+
+            {/* ACTIVE SESSIONS TAB */}
+            {activeTab === 'sessions' && (
+              <div>
+                <h3 style={{ fontSize: '18px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '16px' }}>
+                  {user?.role === 'Super Admin' ? 'Active Online User Sessions' : 'Active Clocked-In Employees'}
+                </h3>
+                
+                {sessionsList.length === 0 ? (
+                  <p style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                    No active sessions or clocked-in employees found.
+                  </p>
+                ) : (
+                  <div className="table-container">
+                    <table className="custom-table">
+                      <thead>
+                        {user?.role === 'Super Admin' ? (
+                          <tr>
+                            <th>User Name / Email</th>
+                            <th>Role</th>
+                            <th>Current Location</th>
+                            <th>Active From (IST)</th>
+                            <th>Active Duration</th>
+                            <th>Client Info</th>
+                            <th style={{ width: '120px', textAlign: 'center' }}>Actions</th>
+                          </tr>
+                        ) : (
+                          <tr>
+                            <th>Employee ID</th>
+                            <th>Employee Name</th>
+                            <th>Department</th>
+                            <th>Clock-In Time</th>
+                            <th>Assigned Location</th>
+                            <th>Active From (IST)</th>
+                            <th>Active Duration</th>
+                            <th style={{ width: '220px', textAlign: 'center' }}>Actions</th>
+                          </tr>
+                        )}
+                      </thead>
+                      <tbody>
+                        {sessionsList.map((item, idx) => {
+                          const uniqueKey = item.session_id || item.employee_id || idx;
+                          if (user?.role === 'Super Admin') {
+                            return (
+                              <tr key={uniqueKey}>
+                                <td>
+                                  <div style={{ fontWeight: 600 }}>{item.name}</div>
+                                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{item.email}</span>
+                                </td>
+                                <td>
+                                  <span className={`badge ${item.role === 'Employee' ? 'badge-kyc-pending' : 'badge-active'}`}>
+                                    {item.role}
+                                  </span>
+                                </td>
+                                <td style={{ fontWeight: 500, color: 'var(--chub-purple)' }}>{item.location}</td>
+                                <td style={{ fontSize: '12px' }}>{item.active_from}</td>
+                                <td style={{ fontWeight: 600, color: 'var(--chub-pink)' }}>{item.active_duration}</td>
+                                <td>
+                                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                    <div>IP: {item.ip_address}</div>
+                                    <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '200px' }} title={item.user_agent}>
+                                      {item.user_agent}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td style={{ textAlign: 'center' }}>
+                                  {item.session_id ? (
+                                    <button
+                                      onClick={() => handleForceSignout(item.session_id, item.name)}
+                                      className="btn btn-danger"
+                                      style={{ padding: '6px 12px', fontSize: '12px' }}
+                                    >
+                                      Force Signout
+                                    </button>
+                                  ) : (
+                                    <span style={{ color: 'var(--text-muted)' }}>Offline</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          } else {
+                            // Admin Controller view
+                            return (
+                              <tr key={uniqueKey}>
+                                <td style={{ fontWeight: 600 }}>{item.employee_id_str}</td>
+                                <td style={{ fontWeight: 600 }}>{item.name}</td>
+                                <td>{item.department}</td>
+                                <td style={{ fontWeight: 600, color: 'var(--chub-purple)' }}>{item.clock_in_time} IST</td>
+                                <td>{item.assigned_location}</td>
+                                <td style={{ fontSize: '12px' }}>{item.active_from}</td>
+                                <td style={{ fontWeight: 600, color: 'var(--chub-pink)' }}>{item.active_duration}</td>
+                                <td style={{ textAlign: 'center' }}>
+                                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                    <button
+                                      onClick={() => handleForceClockout(item.employee_id, item.name)}
+                                      className="btn btn-secondary"
+                                      style={{ padding: '6px 12px', fontSize: '12px', borderColor: 'var(--chub-purple)', color: 'var(--chub-purple)' }}
+                                    >
+                                      Force Clock-out
+                                    </button>
+                                    {item.session_id ? (
+                                      <button
+                                        onClick={() => handleForceSignout(item.session_id, item.name)}
+                                        className="btn btn-danger"
+                                        style={{ padding: '6px 12px', fontSize: '12px' }}
+                                      >
+                                        Force Signout
+                                      </button>
+                                    ) : (
+                                      <button
+                                        className="btn btn-secondary"
+                                        style={{ padding: '6px 12px', fontSize: '12px', opacity: 0.5, cursor: 'not-allowed' }}
+                                        disabled
+                                        title="Employee is not currently signed in"
+                                      >
+                                        Offline
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          }
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
             )}
