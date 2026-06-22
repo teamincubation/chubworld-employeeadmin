@@ -20,41 +20,96 @@ async function authenticateToken(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    
-    // Fetch user from Supabase to verify they are still active and validate their role
-    const { data: users, error: userError } = await supabase
-      .from('users')
-      .select('id, email, status, onboarding_completed, role_id, roles(id, name)')
-      .eq('id', decoded.id);
+    let roleName = '';
+    let userPermissions = [];
 
-    if (userError || !users || users.length === 0) {
-      return res.status(403).json({ message: 'User session invalid or expired.' });
+    if (decoded.role === 'Employee') {
+      const { data: emps, error: empErr } = await supabase
+        .from('employees')
+        .select('id, employee_id, full_name, email, mobile, onboarding_status, photo_path, status')
+        .eq('id', decoded.id)
+        .is('deleted_at', null);
+
+      if (empErr || !emps || emps.length === 0) {
+        return res.status(403).json({ message: 'Employee session invalid or expired.' });
+      }
+
+      const employee = emps[0];
+      if (employee.status !== 'Active') {
+        return res.status(403).json({ message: 'Your account has been deactivated.' });
+      }
+
+      // Fetch permissions for Employee role (ID 6)
+      const { data: rolePerms } = await supabase
+        .from('role_permissions')
+        .select('permissions(name)')
+        .eq('role_id', 6);
+
+      userPermissions = (rolePerms || []).map(rp => rp.permissions ? rp.permissions.name : null).filter(Boolean);
+
+      req.user = {
+        id: employee.id,
+        email: employee.email,
+        roleId: 6,
+        roleName: 'Employee',
+        employeeId: employee.id,
+        employeeStringId: employee.employee_id,
+        fullName: employee.full_name,
+        onboardingStatus: employee.onboarding_status,
+        permissions: userPermissions
+      };
+      roleName = 'Employee';
+    } else {
+      // Fetch user from Supabase to verify they are still active and validate their role
+      const { data: users, error: userError } = await supabase
+        .from('users')
+        .select('id, email, status, onboarding_completed, role_id, roles(id, name)')
+        .eq('id', decoded.id);
+
+      if (userError || !users || users.length === 0) {
+        return res.status(403).json({ message: 'User session invalid or expired.' });
+      }
+
+      const user = users[0];
+      if (user.status !== 'active') {
+        return res.status(403).json({ message: 'Your account has been deactivated.' });
+      }
+
+      roleName = user.roles ? user.roles.name : '';
+
+      // Load permissions for this role
+      const { data: rolePerms, error: permError } = await supabase
+        .from('role_permissions')
+        .select('permissions(name)')
+        .eq('role_id', user.role_id);
+
+      userPermissions = (rolePerms || []).map(rp => rp.permissions ? rp.permissions.name : null).filter(Boolean);
+
+      // Attach user information to request
+      req.user = {
+        id: user.id,
+        email: user.email,
+        roleId: user.role_id,
+        roleName: roleName,
+        onboardingCompleted: user.onboarding_completed,
+        permissions: userPermissions
+      };
+
+      // If Employee role is present inside the users table (backward compatibility/legacy)
+      if (roleName === 'Employee') {
+        const { data: employees, error: empError } = await supabase
+          .from('employees')
+          .select('id, employee_id, full_name, onboarding_status')
+          .eq('user_id', user.id);
+          
+        if (!empError && employees && employees.length > 0) {
+          req.user.employeeId = employees[0].id;
+          req.user.employeeStringId = employees[0].employee_id;
+          req.user.fullName = employees[0].full_name;
+          req.user.onboardingStatus = employees[0].onboarding_status;
+        }
+      }
     }
-
-    const user = users[0];
-    if (user.status !== 'active') {
-      return res.status(403).json({ message: 'Your account has been deactivated.' });
-    }
-
-    const roleName = user.roles ? user.roles.name : '';
-
-    // Load permissions for this role
-    const { data: rolePerms, error: permError } = await supabase
-      .from('role_permissions')
-      .select('permissions(name)')
-      .eq('role_id', user.role_id);
-
-    const userPermissions = (rolePerms || []).map(rp => rp.permissions ? rp.permissions.name : null).filter(Boolean);
-
-    // Attach user information to request
-    req.user = {
-      id: user.id,
-      email: user.email,
-      roleId: user.role_id,
-      roleName: roleName,
-      onboardingCompleted: user.onboarding_completed,
-      permissions: userPermissions
-    };
 
     // Emergency lockdown check
     if (roleName !== 'Super Admin') {
@@ -77,22 +132,6 @@ async function authenticateToken(req, res, next) {
       }
     }
 
-    // If Employee is logged in, we fetch their Employee table record ID and attach it
-    if (roleName === 'Employee') {
-      const { data: employees, error: empError } = await supabase
-        .from('employees')
-        .select('id, employee_id, full_name, onboarding_status')
-        .eq('user_id', user.id);
-        
-      if (!empError && employees && employees.length > 0) {
-        req.user.employeeId = employees[0].id;
-        req.user.employeeStringId = employees[0].employee_id;
-        req.user.fullName = employees[0].full_name;
-        req.user.onboardingStatus = employees[0].onboarding_status;
-      }
-    }
-
-
     next();
   } catch (err) {
     console.error('JWT Verification Error:', err.message);
@@ -100,11 +139,16 @@ async function authenticateToken(req, res, next) {
   }
 }
 
-/**
- * Checks if user has a specific permission
- */
 function requirePermission(permissionName) {
   return (req, res, next) => {
+    // If the requester is an Employee and they are viewing their own record, bypass the 'employee:view' check.
+    if (req.user && req.user.roleName === 'Employee' && permissionName === 'employee:view') {
+      const requestedId = parseInt(req.params.id, 10);
+      if (requestedId === req.user.employeeId) {
+        return next();
+      }
+    }
+
     if (!req.user || !req.user.permissions.includes(permissionName)) {
       return res.status(403).json({ 
         message: `Forbidden: You do not have the required permission (${permissionName})` 

@@ -35,6 +35,7 @@ async function recordLoginHistory(userId, email, ip, userAgent, status, remarks)
  */
 const authController = {
   // Login Endpoint
+  // Login Endpoint
   login: async (req, res) => {
     const { email, password, portal } = req.body;
     const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
@@ -45,35 +46,49 @@ const authController = {
     }
 
     try {
-      // Find user and join role name
-      const { data: users, error: userError } = await supabase
-        .from('users')
-        .select('*, roles(name)')
-        .eq('email', email);
-
-      if (userError || !users || users.length === 0) {
-        await recordLoginHistory(null, email, ip, userAgent, 'Failed', 'User email not found');
-        return res.status(401).json({ message: 'Invalid credentials.' });
-      }
-
-      const user = users[0];
-      const roleName = user.roles ? user.roles.name : '';
-
-      // Enforce portal role-based access validation
       if (portal === 'employee') {
-        if (roleName !== 'Employee') {
-          await recordLoginHistory(user.id, email, ip, userAgent, 'Failed', 'Admin attempting ESS login');
-          return res.status(403).json({ message: 'Administrators must log in via the Administrative Portal.' });
-        }
-      } else {
-        if (roleName === 'Employee') {
-          await recordLoginHistory(user.id, email, ip, userAgent, 'Failed', 'Employee attempting Admin login');
-          return res.status(403).json({ message: 'Employees must log in via the Employee ESS Portal.' });
-        }
-      }
+        // Query employees table directly
+        const { data: employees, error: empError } = await supabase
+          .from('employees')
+          .select('*')
+          .eq('email', email)
+          .is('deleted_at', null);
 
-      // Emergency lockdown check
-      if (roleName !== 'Super Admin') {
+        if (empError || !employees || employees.length === 0) {
+          await recordLoginHistory(null, email, ip, userAgent, 'Failed', 'Employee email not found');
+          return res.status(401).json({ message: 'Invalid credentials.' });
+        }
+
+        const employee = employees[0];
+
+        // Check employee status
+        if (employee.status !== 'Active') {
+          await recordLoginHistory(null, email, ip, userAgent, 'Failed', 'Employee account deactivated');
+          return res.status(403).json({ message: 'Your account is deactivated.' });
+        }
+
+        // Check onboarding status
+        const onboardingStatus = employee.onboarding_status;
+        if (onboardingStatus !== 'Approved' && onboardingStatus !== 'Onboarding Completed') {
+          await recordLoginHistory(null, email, ip, userAgent, 'Failed', `Blocked: Onboarding status is ${onboardingStatus}`);
+          return res.status(403).json({ 
+            message: `Access denied. Employee login is allowed only after KYC verification and Onboarding completion. Current status: ${onboardingStatus}.` 
+          });
+        }
+
+        // Check password
+        if (!employee.password_hash) {
+          await recordLoginHistory(null, email, ip, userAgent, 'Failed', 'No password set for employee');
+          return res.status(401).json({ message: 'Invalid credentials.' });
+        }
+
+        const isMatch = await bcrypt.compare(password, employee.password_hash);
+        if (!isMatch) {
+          await recordLoginHistory(null, email, ip, userAgent, 'Failed', 'Incorrect password');
+          return res.status(401).json({ message: 'Invalid credentials.' });
+        }
+
+        // Emergency lockdown check for Employee
         const { data: accessData } = await supabase
           .from('admin_controller_access')
           .select('status')
@@ -81,7 +96,7 @@ const authController = {
 
         if (accessData && accessData.length > 0 && accessData[0].status !== 'Active') {
           const sysStatus = accessData[0].status;
-          await recordLoginHistory(user.id, email, ip, userAgent, 'Failed', `Blocked: Emergency lockdown (${sysStatus})`);
+          await recordLoginHistory(null, email, ip, userAgent, 'Failed', `Blocked: Emergency lockdown (${sysStatus})`);
           
           let errMsg = 'Access Denied: The system has been locked down by the Super Admin.';
           if (sysStatus === 'Paused') {
@@ -93,63 +108,120 @@ const authController = {
           }
           return res.status(403).json({ message: errMsg });
         }
-      }
 
-      if (user.status !== 'active') {
-        await recordLoginHistory(user.id, email, ip, userAgent, 'Failed', 'Account deactivated');
-        return res.status(403).json({ message: 'Your account is deactivated.' });
-      }
+        // Generate JWT
+        const token = jwt.sign(
+          { id: employee.id, email: employee.email, role: 'Employee' },
+          JWT_SECRET,
+          { expiresIn: JWT_EXPIRES_IN }
+        );
 
+        // Record successful login
+        await recordLoginHistory(null, email, ip, userAgent, 'Success', 'Employee login completed');
+        
+        // Log audit trail
+        req.user = { id: employee.id, email: employee.email, roleName: 'Employee', employeeId: employee.id };
+        await logAudit(req, 'LOGIN_SUCCESS', `employees/${employee.id}`);
 
-      // Check password
-      const isMatch = await bcrypt.compare(password, user.password_hash);
-      if (!isMatch) {
-        await recordLoginHistory(user.id, email, ip, userAgent, 'Failed', 'Incorrect password');
-        return res.status(401).json({ message: 'Invalid credentials.' });
-      }
+        // Return token & profile structure
+        return res.json({
+          token,
+          user: {
+            id: employee.id,
+            email: employee.email,
+            role: 'Employee',
+            onboardingCompleted: employee.onboarding_status === 'Onboarding Completed'
+          },
+          employee: {
+            id: employee.id,
+            employee_id: employee.employee_id,
+            full_name: employee.full_name,
+            mobile: employee.mobile,
+            onboarding_status: employee.onboarding_status,
+            photo_path: employee.photo_path
+          }
+        });
+      } else {
+        // Administrative Portal Login
+        const { data: users, error: userError } = await supabase
+          .from('users')
+          .select('*, roles(name)')
+          .eq('email', email);
 
-      // If user is employee, check onboarding status
-      if (roleName === 'Employee') {
-        const { data: empCheck, error: empError } = await supabase
-          .from('employees')
-          .select('onboarding_status')
-          .eq('user_id', user.id);
-          
-        if (!empError && empCheck && empCheck.length > 0) {
-          const onboardingStatus = empCheck[0].onboarding_status;
-          if (onboardingStatus !== 'Approved' && onboardingStatus !== 'Onboarding Completed') {
-            await recordLoginHistory(user.id, email, ip, userAgent, 'Failed', `Blocked: Onboarding status is ${onboardingStatus}`);
-            return res.status(403).json({ 
-              message: `Access denied. Employee login is allowed only after KYC verification and Onboarding completion. Current status: ${onboardingStatus}.` 
-            });
+        if (userError || !users || users.length === 0) {
+          await recordLoginHistory(null, email, ip, userAgent, 'Failed', 'User email not found');
+          return res.status(401).json({ message: 'Invalid credentials.' });
+        }
+
+        const user = users[0];
+        const roleName = user.roles ? user.roles.name : '';
+
+        // Block Employees from admin portal
+        if (roleName === 'Employee') {
+          await recordLoginHistory(user.id, email, ip, userAgent, 'Failed', 'Employee attempting Admin login');
+          return res.status(403).json({ message: 'Employees must log in via the Employee ESS Portal.' });
+        }
+
+        // Emergency lockdown check
+        if (roleName !== 'Super Admin') {
+          const { data: accessData } = await supabase
+            .from('admin_controller_access')
+            .select('status')
+            .limit(1);
+
+          if (accessData && accessData.length > 0 && accessData[0].status !== 'Active') {
+            const sysStatus = accessData[0].status;
+            await recordLoginHistory(user.id, email, ip, userAgent, 'Failed', `Blocked: Emergency lockdown (${sysStatus})`);
+            
+            let errMsg = 'Access Denied: The system has been locked down by the Super Admin.';
+            if (sysStatus === 'Paused') {
+              errMsg = 'Access Suspended: The system has been locked down by the Super Admin.';
+            } else if (sysStatus === 'Deactivated') {
+              errMsg = 'Access Denied: Admin Controller access has been deactivated by the Super Admin.';
+            } else if (sysStatus === 'Revoked') {
+              errMsg = 'Access Denied: Admin Controller access has been revoked by the Super Admin.';
+            }
+            return res.status(403).json({ message: errMsg });
           }
         }
-      }
 
-      // Generate JWT
-      const token = jwt.sign(
-        { id: user.id, email: user.email, role: roleName },
-        JWT_SECRET,
-        { expiresIn: JWT_EXPIRES_IN }
-      );
-
-      // Record successful login
-      await recordLoginHistory(user.id, email, ip, userAgent, 'Success', 'Login completed');
-      
-      // Log audit trail
-      req.user = { id: user.id, email: user.email, roleName: roleName };
-      await logAudit(req, 'LOGIN_SUCCESS', `users/${user.id}`);
-
-      // Return token & profile structure
-      res.json({
-        token,
-        user: {
-          id: user.id,
-          email: user.email,
-          role: roleName,
-          onboardingCompleted: user.onboarding_completed
+        if (user.status !== 'active') {
+          await recordLoginHistory(user.id, email, ip, userAgent, 'Failed', 'Account deactivated');
+          return res.status(403).json({ message: 'Your account is deactivated.' });
         }
-      });
+
+        // Check password
+        const isMatch = await bcrypt.compare(password, user.password_hash);
+        if (!isMatch) {
+          await recordLoginHistory(user.id, email, ip, userAgent, 'Failed', 'Incorrect password');
+          return res.status(401).json({ message: 'Invalid credentials.' });
+        }
+
+        // Generate JWT
+        const token = jwt.sign(
+          { id: user.id, email: user.email, role: roleName },
+          JWT_SECRET,
+          { expiresIn: JWT_EXPIRES_IN }
+        );
+
+        // Record successful login
+        await recordLoginHistory(user.id, email, ip, userAgent, 'Success', 'Login completed');
+        
+        // Log audit trail
+        req.user = { id: user.id, email: user.email, roleName: roleName };
+        await logAudit(req, 'LOGIN_SUCCESS', `users/${user.id}`);
+
+        // Return token & profile structure
+        return res.json({
+          token,
+          user: {
+            id: user.id,
+            email: user.email,
+            role: roleName,
+            onboardingCompleted: user.onboarding_completed
+          }
+        });
+      }
     } catch (err) {
       console.error('Login Endpoint Error:', err.message);
       res.status(500).json({ message: 'Internal server login error.' });
@@ -175,17 +247,41 @@ const authController = {
     }
 
     try {
+      let foundType = 'user';
+      let entity = null;
+
+      // Check users table
       const { data: users, error: userError } = await supabase
         .from('users')
         .select('id, email, status')
         .eq('email', email);
         
-      if (userError || !users || users.length === 0) {
+      if (!userError && users && users.length > 0) {
+        entity = users[0];
+        foundType = 'user';
+      } else {
+        // Check employees table
+        const { data: emps, error: empError } = await supabase
+          .from('employees')
+          .select('id, email, status')
+          .eq('email', email)
+          .is('deleted_at', null);
+
+        if (!empError && emps && emps.length > 0) {
+          entity = emps[0];
+          foundType = 'employee';
+        }
+      }
+
+      if (!entity) {
         return res.json({ message: 'If the email exists in our records, a secure password reset link will be sent.' });
       }
 
-      const user = users[0];
-      if (user.status !== 'active') {
+      const isActive = foundType === 'user'
+        ? entity.status === 'active'
+        : entity.status === 'Active';
+
+      if (!isActive) {
         return res.status(403).json({ message: 'Account is inactive.' });
       }
 
@@ -194,15 +290,23 @@ const authController = {
       const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
 
-      // Store hashed token in DB
-      await supabase
-        .from('users')
-        .update({ reset_token_hash: tokenHash, reset_token_expires_at: expiresAt })
-        .eq('id', user.id);
-
-      // Log security event & audit log
-      req.user = { id: user.id, email: user.email, roleName: 'Public' };
-      await logAudit(req, 'PASSWORD_RESET_REQUESTED', `users/${user.id}`);
+      if (foundType === 'user') {
+        // Store hashed token in users
+        await supabase
+          .from('users')
+          .update({ reset_token_hash: tokenHash, reset_token_expires_at: expiresAt })
+          .eq('id', entity.id);
+        req.user = { id: entity.id, email: entity.email, roleName: 'Public' };
+        await logAudit(req, 'PASSWORD_RESET_REQUESTED', `users/${entity.id}`);
+      } else {
+        // Store hashed token in employees
+        await supabase
+          .from('employees')
+          .update({ reset_token_hash: tokenHash, reset_token_expires_at: expiresAt })
+          .eq('id', entity.id);
+        req.user = { id: entity.id, email: entity.email, roleName: 'Employee' };
+        await logAudit(req, 'PASSWORD_RESET_REQUESTED', `employees/${entity.id}`);
+      }
 
       const protocol = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
       const host = req.headers.host || 'chubworld.adloaf.com';
@@ -298,19 +402,38 @@ const authController = {
 
     try {
       const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      let foundType = 'user';
+      let entity = null;
 
+      // Check users
       const { data: users, error: userError } = await supabase
         .from('users')
         .select('id, email, reset_token_expires_at')
         .eq('reset_token_hash', tokenHash);
 
-      if (userError || !users || users.length === 0) {
+      if (!userError && users && users.length > 0) {
+        entity = users[0];
+        foundType = 'user';
+      } else {
+        // Check employees
+        const { data: emps, error: empError } = await supabase
+          .from('employees')
+          .select('id, email, reset_token_expires_at')
+          .eq('reset_token_hash', tokenHash)
+          .is('deleted_at', null);
+
+        if (!empError && emps && emps.length > 0) {
+          entity = emps[0];
+          foundType = 'employee';
+        }
+      }
+
+      if (!entity) {
         return res.status(400).json({ message: 'Invalid or expired password reset token.' });
       }
 
-      const user = users[0];
       const now = new Date();
-      const expiresAt = new Date(user.reset_token_expires_at);
+      const expiresAt = new Date(entity.reset_token_expires_at);
 
       if (expiresAt < now) {
         return res.status(400).json({ message: 'Password reset token has expired.' });
@@ -320,15 +443,25 @@ const authController = {
       const salt = await bcrypt.genSalt(10);
       const newHash = await bcrypt.hash(newPassword, salt);
 
-      // Update password and clear token
-      await supabase
-        .from('users')
-        .update({ password_hash: newHash, reset_token_hash: null, reset_token_expires_at: null })
-        .eq('id', user.id);
+      if (foundType === 'user') {
+        // Update password and clear token in users
+        await supabase
+          .from('users')
+          .update({ password_hash: newHash, reset_token_hash: null, reset_token_expires_at: null })
+          .eq('id', entity.id);
 
-      // Log audit
-      req.user = { id: user.id, email: user.email, roleName: 'Public' };
-      await logAudit(req, 'PASSWORD_RESET_SUCCESS', `users/${user.id}`);
+        req.user = { id: entity.id, email: entity.email, roleName: 'Public' };
+        await logAudit(req, 'PASSWORD_RESET_SUCCESS', `users/${entity.id}`);
+      } else {
+        // Update password and clear token in employees
+        await supabase
+          .from('employees')
+          .update({ password_hash: newHash, reset_token_hash: null, reset_token_expires_at: null })
+          .eq('id', entity.id);
+
+        req.user = { id: entity.id, email: entity.email, roleName: 'Employee' };
+        await logAudit(req, 'PASSWORD_RESET_SUCCESS', `employees/${entity.id}`);
+      }
 
       res.json({ message: 'Password has been reset successfully.' });
     } catch (err) {
@@ -345,33 +478,63 @@ const authController = {
     }
 
     try {
-      const { data: users, error: userError } = await supabase
-        .from('users')
-        .select('password_hash')
-        .eq('id', req.user.id);
+      if (req.user.roleName === 'Employee') {
+        const { data: emps, error: empErr } = await supabase
+          .from('employees')
+          .select('password_hash')
+          .eq('id', req.user.id)
+          .is('deleted_at', null);
 
-      if (userError || !users || users.length === 0) {
-        return res.status(404).json({ message: 'User not found.' });
+        if (empErr || !emps || emps.length === 0) {
+          return res.status(404).json({ message: 'Employee not found.' });
+        }
+
+        const employee = emps[0];
+        const isMatch = await bcrypt.compare(currentPassword, employee.password_hash || '');
+        if (!isMatch) {
+          await logAudit(req, 'PASSWORD_CHANGE_FAILED_WRONG_PASSWORD', `employees/${req.user.id}`);
+          return res.status(400).json({ message: 'Current password is incorrect.' });
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        const newHash = await bcrypt.hash(newPassword, salt);
+
+        await supabase
+          .from('employees')
+          .update({ password_hash: newHash })
+          .eq('id', req.user.id);
+
+        await logAudit(req, 'PASSWORD_CHANGED_SUCCESS', `employees/${req.user.id}`);
+        return res.json({ message: 'Password updated successfully.' });
+      } else {
+        const { data: users, error: userError } = await supabase
+          .from('users')
+          .select('password_hash')
+          .eq('id', req.user.id);
+
+        if (userError || !users || users.length === 0) {
+          return res.status(404).json({ message: 'User not found.' });
+        }
+
+        const user = users[0];
+
+        const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+        if (!isMatch) {
+          await logAudit(req, 'PASSWORD_CHANGE_FAILED_WRONG_PASSWORD', `users/${req.user.id}`);
+          return res.status(400).json({ message: 'Current password is incorrect.' });
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        const newHash = await bcrypt.hash(newPassword, salt);
+
+        await supabase
+          .from('users')
+          .update({ password_hash: newHash })
+          .eq('id', req.user.id);
+
+        await logAudit(req, 'PASSWORD_CHANGED_SUCCESS', `users/${req.user.id}`);
+        return res.json({ message: 'Password updated successfully.' });
       }
-
-      const user = users[0];
-
-      const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
-      if (!isMatch) {
-        await logAudit(req, 'PASSWORD_CHANGE_FAILED_WRONG_PASSWORD', `users/${req.user.id}`);
-        return res.status(400).json({ message: 'Current password is incorrect.' });
-      }
-
-      const salt = await bcrypt.genSalt(10);
-      const newHash = await bcrypt.hash(newPassword, salt);
-
-      await supabase
-        .from('users')
-        .update({ password_hash: newHash })
-        .eq('id', req.user.id);
-
-      await logAudit(req, 'PASSWORD_CHANGED_SUCCESS', `users/${req.user.id}`);
-      res.json({ message: 'Password updated successfully.' });
     } catch (err) {
       console.error('ChangePassword error:', err.message);
       res.status(500).json({ message: 'Error updating password.' });
@@ -381,6 +544,37 @@ const authController = {
   // Fetch current user details
   getMe: async (req, res) => {
     try {
+      if (req.user.roleName === 'Employee') {
+        const { data: employees, error: empErr } = await supabase
+          .from('employees')
+          .select('id, employee_id, full_name, email, mobile, onboarding_status, photo_path, status')
+          .eq('id', req.user.id)
+          .is('deleted_at', null);
+
+        if (empErr || !employees || employees.length === 0) {
+          return res.status(404).json({ message: 'Employee profile not found.' });
+        }
+
+        const employee = employees[0];
+        return res.json({
+          user: {
+            id: employee.id,
+            email: employee.email,
+            role: 'Employee',
+            onboardingCompleted: employee.onboarding_status === 'Onboarding Completed'
+          },
+          employee: {
+            id: employee.id,
+            employee_id: employee.employee_id,
+            full_name: employee.full_name,
+            email: employee.email,
+            mobile: employee.mobile,
+            onboarding_status: employee.onboarding_status,
+            photo_path: employee.photo_path
+          }
+        });
+      }
+
       const { data: users, error: userError } = await supabase
         .from('users')
         .select('id, email, onboarding_completed, roles(name)')
@@ -421,7 +615,6 @@ const authController = {
           };
         }
       }
-
 
       res.json({
         user: {

@@ -82,57 +82,48 @@ const employeeController = {
     }
   },
 
-  // Helper to create user account upon onboarding approval
+  // Helper to create user account credentials upon onboarding approval
   autoCreateUserAccount: async (employeeId, email, name, customPassword) => {
     try {
-      const { data: existingUser } = await supabase.from('users').select('id').eq('email', email);
-      
       const bcrypt = require('bcryptjs');
       const defaultPassword = customPassword || 'CHubEmp@2026';
       const salt = await bcrypt.genSalt(10);
       const passHash = await bcrypt.hash(defaultPassword, salt);
 
-      if (existingUser && existingUser.length > 0) {
-        // If user already exists, update password if customPassword was provided
-        if (customPassword) {
-          await supabase.from('users').update({ password_hash: passHash }).eq('id', existingUser[0].id);
-          console.log(`User password updated for employee ID ${employeeId}.`);
-          // Dispatch SMTP Email Notification
-          await employeeController.sendOnboardingEmail(email, name, defaultPassword);
-        }
-        return;
-      }
+      // Save password_hash directly to employees table
+      const { error: updateErr } = await supabase
+        .from('employees')
+        .update({ password_hash: passHash })
+        .eq('id', employeeId);
 
-      // Default role is Employee (ID 6)
-      const { data: userResult, error: userErr } = await supabase
-        .from('users')
-        .insert([{ email, password_hash: passHash, role_id: 6, status: 'active', onboarding_completed: true }])
-        .select('id')
-        .single();
+      if (updateErr) throw updateErr;
 
-      if (userErr) throw userErr;
-
-      const newUserId = userResult.id;
-
-      // Link employee back to users table
-      await supabase.from('employees').update({ user_id: newUserId }).eq('id', employeeId);
-      
       // Initialize leave balance for 2026
       const { data: leaveTypes } = await supabase.from('leave_types').select('id, max_days').eq('active', true);
       if (leaveTypes) {
         for (const lt of leaveTypes) {
-          await supabase.from('leave_balances').insert([{
-            employee_id: employeeId, leave_type_id: lt.id, total_days: lt.max_days, availed_days: 0.00, pending_days: 0.00, year: 2026
-          }]);
+          // Check if leave balance already exists
+          const { data: existingBalance } = await supabase
+            .from('leave_balances')
+            .select('id')
+            .eq('employee_id', employeeId)
+            .eq('leave_type_id', lt.id)
+            .eq('year', 2026);
+
+          if (!existingBalance || existingBalance.length === 0) {
+            await supabase.from('leave_balances').insert([{
+              employee_id: employeeId, leave_type_id: lt.id, total_days: lt.max_days, availed_days: 0.00, pending_days: 0.00, year: 2026
+            }]);
+          }
         }
       }
 
-      console.log(`Auto User created for employee ID ${employeeId}. Account email: ${email}. Password: ${defaultPassword}`);
+      console.log(`Auto credentials set for employee ID ${employeeId}. Email: ${email}. Password: ${defaultPassword}`);
       
       // Dispatch SMTP Email Notification
       await employeeController.sendOnboardingEmail(email, name, defaultPassword);
     } catch (err) {
-      console.error('Auto user registration failed:', err.message);
+      console.error('Auto employee credentials creation failed:', err.message);
     }
   },
 
@@ -512,7 +503,7 @@ const employeeController = {
 
       // Block self-deletion or deleting the Admin Controller (unless Super Admin is the requester)
       if (req.user.roleName !== 'Super Admin') {
-        if (employee[0].user_id === req.user.id) {
+        if (employee[0].id === req.user.employeeId || employee[0].user_id === req.user.id) {
           return res.status(403).json({ message: 'Access denied: You cannot delete your own account.' });
         }
 
@@ -664,16 +655,11 @@ const employeeController = {
     }
 
     try {
-      const { data: employee, error } = await supabase
-        .from('employees')
-        .select('id')
-        .eq('user_id', req.user.id);
+      const empId = req.user.employeeId;
 
-      if (error || !employee || employee.length === 0) {
+      if (!empId) {
         return res.status(404).json({ message: 'Employee profile not found for this user.' });
       }
-
-      const empId = employee[0].id;
       const docName = req.file.originalname;
       const docPath = req.file.path.replace(/\\/g, '/');
       const docSize = req.file.size;
