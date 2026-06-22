@@ -1,16 +1,63 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Lock, Mail, ShieldAlert, Smartphone, Download, CheckCircle } from 'lucide-react';
 
 export default function ESSLogin() {
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const handleGoogleLoginSuccess = async (response) => {
+    if (!response.credential) return;
+    setError('');
+    setSubmitting(true);
+    try {
+      await loginWithGoogle(response.credential);
+      navigate('/');
+    } catch (err) {
+      console.error(err);
+      setError(err.message || 'Google verification failed.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  useEffect(() => {
+    const initGoogleBtn = () => {
+      if (window.google) {
+        window.google.accounts.id.initialize({
+          client_id: '569944481961-t4ckmi7489bultilo6nvv67m7d1uj965.apps.googleusercontent.com',
+          callback: handleGoogleLoginSuccess
+        });
+        const container = document.getElementById('google-signin-btn');
+        if (container) {
+          window.google.accounts.id.renderButton(
+            container,
+            { theme: 'outline', size: 'large', width: 372, text: 'signin_with' }
+          );
+        }
+      }
+    };
+
+    const existingScript = document.getElementById('google-jssdk');
+    if (existingScript) {
+      initGoogleBtn();
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = 'google-jssdk';
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = initGoogleBtn;
+    document.body.appendChild(script);
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -213,6 +260,24 @@ export default function ESSLogin() {
             {submitting ? 'Verifying Employee ID...' : 'Clock-In Sign In'}
           </button>
         </form>
+
+        {/* OR Divider */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          margin: '20px 0',
+          color: '#6B6470',
+          fontSize: '12px'
+        }}>
+          <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.05)' }}></div>
+          <span style={{ padding: '0 10px', textTransform: 'uppercase', fontWeight: 600 }}>OR</span>
+          <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.05)' }}></div>
+        </div>
+
+        {/* Google Sign-in Button Container */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '10px' }}>
+          <div id="google-signin-btn" style={{ width: '100%' }}></div>
+        </div>
 
         {/* Redirect to Admin Portal link */}
         <div style={{ textAlign: 'center', marginTop: '20px', borderTop: '1px solid rgba(255, 255, 255, 0.05)', paddingTop: '16px' }}>

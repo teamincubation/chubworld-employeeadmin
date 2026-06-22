@@ -292,6 +292,154 @@ const authController = {
     }
   },
 
+  // Google Authentication Sign-In for ESS Portal (Employees Only)
+  googleLogin: async (req, res) => {
+    const { token } = req.body;
+    const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+
+    if (!token) {
+      return res.status(400).json({ message: 'Google authentication token is required.' });
+    }
+
+    try {
+      // 1. Verify token via Google Tokeninfo API
+      const googleVerifyUrl = `https://oauth2.googleapis.com/tokeninfo?id_token=${token}`;
+      const verifyRes = await fetch(googleVerifyUrl);
+      if (!verifyRes.ok) {
+        await recordLoginHistory(null, 'unknown-google-user', ip, userAgent, 'Failed', 'Invalid Google token signature');
+        return res.status(401).json({ message: 'Google authentication failed: Invalid or expired token.' });
+      }
+
+      const googlePayload = await verifyRes.json();
+      const { email, email_verified } = googlePayload;
+
+      if (!email || !email_verified) {
+        await recordLoginHistory(null, email || 'unknown-google-user', ip, userAgent, 'Failed', 'Google email not verified');
+        return res.status(401).json({ message: 'Google authentication failed: Email must be verified.' });
+      }
+
+      // 2. Fetch employee details matching this registered email
+      const { data: employees, error: empError } = await supabase
+        .from('employees')
+        .select('*')
+        .eq('email', email)
+        .is('deleted_at', null);
+
+      if (empError || !employees || employees.length === 0) {
+        await recordLoginHistory(null, email, ip, userAgent, 'Failed', 'Google email not registered in employees database');
+        return res.status(403).json({ message: `Access denied: The email address (${email}) is not registered in the C-Hub employees registry.` });
+      }
+
+      const employee = employees[0];
+
+      // 3. Verify employee account status
+      if (employee.status !== 'Active') {
+        await recordLoginHistory(null, email, ip, userAgent, 'Failed', 'Google Auth Blocked: Account deactivated');
+        return res.status(403).json({ message: 'Your account is deactivated.' });
+      }
+
+      // 4. Verify onboarding/verification status
+      const onboardingStatus = employee.onboarding_status;
+      if (onboardingStatus !== 'Approved' && onboardingStatus !== 'Onboarding Completed') {
+        await recordLoginHistory(null, email, ip, userAgent, 'Failed', `Google Auth Blocked: Onboarding status is ${onboardingStatus}`);
+        return res.status(403).json({ 
+          message: `Access denied. Employee login is allowed only after KYC verification and Onboarding completion. Current status: ${onboardingStatus}.` 
+        });
+      }
+
+      // 5. Emergency lockdown check
+      const { data: accessData } = await supabase
+        .from('admin_controller_access')
+        .select('status')
+        .limit(1);
+
+      if (accessData && accessData.length > 0 && accessData[0].status !== 'Active') {
+        const sysStatus = accessData[0].status;
+        await recordLoginHistory(null, email, ip, userAgent, 'Failed', `Google Auth Blocked: Emergency lockdown (${sysStatus})`);
+        
+        let errMsg = 'Access Denied: The system has been locked down by the Super Admin.';
+        if (sysStatus === 'Paused') {
+          errMsg = 'Access Suspended: The system has been locked down by the Super Admin.';
+        } else if (sysStatus === 'Deactivated') {
+          errMsg = 'Access Denied: Admin Controller access has been deactivated by the Super Admin.';
+        } else if (sysStatus === 'Revoked') {
+          errMsg = 'Access Denied: Admin Controller access has been revoked by the Super Admin.';
+        }
+        return res.status(403).json({ message: errMsg });
+      }
+
+      // 6. Generate active session ID
+      const sessionId = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
+
+      // Resolve work location name
+      let locationName = 'Remote / No Assigned Location';
+      try {
+        const { data: empLoc } = await supabase
+          .from('employees')
+          .select('work_locations(name)')
+          .eq('id', employee.id)
+          .single();
+        if (empLoc && empLoc.work_locations) {
+          locationName = empLoc.work_locations.name;
+        }
+      } catch (locErr) {
+        console.error('Failed to resolve employee location:', locErr.message);
+      }
+
+      // Save active session in database (IST time)
+      try {
+        const now = new Date();
+        const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+        const istTime = new Date(utc + (3600000 * 5.5));
+        
+        await supabase.from('active_sessions').insert([{
+          employee_id: employee.id,
+          session_id: sessionId,
+          ip_address: ip,
+          user_agent: userAgent,
+          location_name: locationName + ' (Google Sign-In)',
+          login_at: istTime.toISOString(),
+          last_activity_at: istTime.toISOString()
+        }]);
+      } catch (sessErr) {
+        console.error('Failed to create Google active session:', sessErr.message);
+      }
+
+      // 7. Generate signed JWT
+      const tokenPayload = { id: employee.id, email: employee.email, role: 'Employee', sessionId };
+      const ourToken = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+
+      // 8. Record successful login history & trigger security audit log
+      await recordLoginHistory(null, email, ip, userAgent, 'Success', 'Employee Google Login completed');
+      
+      req.user = { id: employee.id, email: employee.email, roleName: 'Employee', employeeId: employee.id, sessionId };
+      await logAudit(req, 'LOGIN_SUCCESS_GOOGLE', `employees/${employee.id}`);
+
+      // Return token & profile structure
+      return res.json({
+        token: ourToken,
+        user: {
+          id: employee.id,
+          email: employee.email,
+          role: 'Employee',
+          onboardingCompleted: employee.onboarding_status === 'Onboarding Completed'
+        },
+        employee: {
+          id: employee.id,
+          employee_id: employee.employee_id,
+          full_name: employee.full_name,
+          mobile: employee.mobile,
+          onboarding_status: employee.onboarding_status,
+          photo_path: employee.photo_path
+        }
+      });
+    } catch (err) {
+      console.error('Google Login Endpoint Error:', err.message);
+      res.status(500).json({ message: 'Internal server Google login error.' });
+    }
+  },
+
   // Logout Endpoint
   logout: async (req, res) => {
     try {

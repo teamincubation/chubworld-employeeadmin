@@ -74,6 +74,24 @@ export function AuthProvider({ children }) {
     return data.user;
   };
 
+  const loginWithGoogle = async (googleToken) => {
+    const res = await fetch(`${API_BASE_URL}/auth/google-login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: googleToken })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || 'Google Login failed.');
+    }
+
+    localStorage.setItem('token', data.token);
+    setToken(data.token);
+    setUser(data.user);
+    return data.user;
+  };
+
   const logout = () => {
     if (token) {
       fetch(`${API_BASE_URL}/auth/logout`, {
@@ -126,7 +144,7 @@ export function AuthProvider({ children }) {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
   return (
-    <AuthContext.Provider value={{ token, user, loading, login, logout, request, theme, toggleTheme, mobileDrawerOpen, setMobileDrawerOpen, fetchProfile }}>
+    <AuthContext.Provider value={{ token, user, loading, login, loginWithGoogle, logout, request, theme, toggleTheme, mobileDrawerOpen, setMobileDrawerOpen, fetchProfile }}>
       {children}
     </AuthContext.Provider>
   );

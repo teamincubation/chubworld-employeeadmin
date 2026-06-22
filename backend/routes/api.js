@@ -64,6 +64,7 @@ const handleUpload = (field) => {
    1. AUTHENTICATION ROUTES
    ========================================================================= */
 router.post('/auth/login', authController.login);
+router.post('/auth/google-login', authController.googleLogin);
 router.post('/auth/forgot-password', authController.forgotPassword);
 router.post('/auth/reset-password', authController.resetPassword);
 router.post('/auth/logout', authenticateToken, authController.logout);
