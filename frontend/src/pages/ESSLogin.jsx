@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Lock, Mail, ShieldAlert, Smartphone, Download, CheckCircle } from 'lucide-react';
+import { Lock, Mail, ShieldAlert, Smartphone, Download, CheckCircle, Eye, EyeOff } from 'lucide-react';
 
 export default function ESSLogin() {
   const { login, loginWithGoogle } = useAuth();
@@ -9,6 +9,7 @@ export default function ESSLogin() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -186,6 +187,46 @@ export default function ESSLogin() {
           </div>
         )}
 
+        {/* Premium Google Sign-in Card */}
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(216,90,166,0.05) 100%)',
+          border: '1px solid rgba(216, 90, 166, 0.2)',
+          borderRadius: '16px',
+          padding: '16px',
+          marginBottom: '24px',
+          boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.1), 0 8px 16px rgba(0,0,0,0.2)'
+        }}>
+          <div style={{
+            fontSize: '11px',
+            color: 'var(--chub-pink)',
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            letterSpacing: '1px',
+            textAlign: 'center',
+            marginBottom: '10px'
+          }}>
+            Instant One-Tap Access
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <div id="google-signin-btn" style={{ width: '100%', display: 'flex', justifyContent: 'center' }}></div>
+          </div>
+        </div>
+
+        {/* OR Divider */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          marginBottom: '20px',
+          color: '#6B6470',
+          fontSize: '11px',
+          fontWeight: 600,
+          letterSpacing: '0.5px'
+        }}>
+          <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.05)' }}></div>
+          <span style={{ padding: '0 10px', textTransform: 'uppercase' }}>Or Sign In With Email</span>
+          <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.05)' }}></div>
+        </div>
+
         {/* Login Form */}
         <form onSubmit={handleSubmit}>
           <div className="form-group" style={{ marginBottom: '16px' }}>
@@ -220,13 +261,14 @@ export default function ESSLogin() {
             </label>
             <div style={{ position: 'relative' }}>
               <input 
-                type="password"
+                type={showPassword ? "text" : "password"}
                 className="form-control"
                 style={{
                   backgroundColor: '#150E1A',
                   border: '1px solid #2B1E33',
                   color: '#FFFFFF',
                   paddingLeft: '44px',
+                  paddingRight: '44px',
                   borderRadius: '12px',
                   height: '48px',
                   fontSize: '14px'
@@ -237,6 +279,24 @@ export default function ESSLogin() {
                 required
               />
               <Lock size={16} style={{ position: 'absolute', left: '16px', top: '16px', color: '#6B6470' }} />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute',
+                  right: '16px',
+                  top: '16px',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#6B6470',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: 0
+                }}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
             </div>
           </div>
 
@@ -260,24 +320,6 @@ export default function ESSLogin() {
             {submitting ? 'Verifying Employee ID...' : 'Clock-In Sign In'}
           </button>
         </form>
-
-        {/* OR Divider */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          margin: '20px 0',
-          color: '#6B6470',
-          fontSize: '12px'
-        }}>
-          <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.05)' }}></div>
-          <span style={{ padding: '0 10px', textTransform: 'uppercase', fontWeight: 600 }}>OR</span>
-          <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.05)' }}></div>
-        </div>
-
-        {/* Google Sign-in Button Container */}
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '10px' }}>
-          <div id="google-signin-btn" style={{ width: '100%' }}></div>
-        </div>
 
         {/* Redirect to Admin Portal link */}
         <div style={{ textAlign: 'center', marginTop: '20px', borderTop: '1px solid rgba(255, 255, 255, 0.05)', paddingTop: '16px' }}>

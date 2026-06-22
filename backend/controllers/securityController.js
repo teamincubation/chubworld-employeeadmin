@@ -1210,6 +1210,348 @@ const securityController = {
       console.error('forceClockout Error:', err.message);
       res.status(500).json({ message: 'Error processing force clock-out.' });
     }
+  },
+
+  getHolidays: async (req, res) => {
+    const { year } = req.query;
+    try {
+      let query = supabase.from('holidays').select('*').order('date', { ascending: true });
+      if (year) {
+        query = query.gte('date', `${year}-01-01`).lte('date', `${year}-12-31`);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      res.json(data || []);
+    } catch (err) {
+      console.error('getHolidays Error:', err.message);
+      res.status(500).json({ message: 'Error retrieving holidays.' });
+    }
+  },
+
+  createHoliday: async (req, res) => {
+    const { name, date, description, type, is_paid } = req.body;
+    try {
+      if (!name || !date) {
+        return res.status(400).json({ message: 'Name and date are required.' });
+      }
+      const metaObj = { notes: description || '', type: type || 'Public Holiday', is_paid: is_paid !== false };
+      const descriptionJson = JSON.stringify(metaObj);
+
+      const { data, error } = await supabase.from('holidays').insert([{
+        name, date, description: descriptionJson
+      }]).select();
+      if (error) throw error;
+
+      await logAudit(req, 'CREATE_HOLIDAY', `holidays/${data[0].id}`, null, data[0]);
+      res.status(201).json({ message: 'Holiday created successfully.', holiday: data[0] });
+    } catch (err) {
+      console.error('createHoliday Error:', err.message);
+      res.status(500).json({ message: 'Error creating holiday. It may already exist.' });
+    }
+  },
+
+  updateHoliday: async (req, res) => {
+    const { id } = req.params;
+    const { name, date, description, type, is_paid } = req.body;
+    try {
+      const metaObj = { notes: description || '', type: type || 'Public Holiday', is_paid: is_paid !== false };
+      const descriptionJson = JSON.stringify(metaObj);
+
+      const { data: oldData } = await supabase.from('holidays').select('*').eq('id', id);
+      
+      const { data, error } = await supabase.from('holidays').update({
+        name, date, description: descriptionJson
+      }).eq('id', id).select();
+      if (error) throw error;
+
+      await logAudit(req, 'UPDATE_HOLIDAY', `holidays/${id}`, oldData?.[0], data[0]);
+      res.json({ message: 'Holiday updated successfully.', holiday: data[0] });
+    } catch (err) {
+      console.error('updateHoliday Error:', err.message);
+      res.status(500).json({ message: 'Error updating holiday.' });
+    }
+  },
+
+  deleteHoliday: async (req, res) => {
+    const { id } = req.params;
+    try {
+      const { data: oldData } = await supabase.from('holidays').select('*').eq('id', id);
+      const { error } = await supabase.from('holidays').delete().eq('id', id);
+      if (error) throw error;
+
+      await logAudit(req, 'DELETE_HOLIDAY', `holidays/${id}`, oldData?.[0], null);
+      res.json({ message: 'Holiday deleted successfully.' });
+    } catch (err) {
+      console.error('deleteHoliday Error:', err.message);
+      res.status(500).json({ message: 'Error deleting holiday.' });
+    }
+  },
+
+  generateWeekends: async (req, res) => {
+    const { year, weekendsType } = req.body;
+    try {
+      if (!year) return res.status(400).json({ message: 'Year is required.' });
+      const targetYear = parseInt(year, 10);
+      const inserts = [];
+      const startDate = new Date(targetYear, 0, 1);
+      const endDate = new Date(targetYear, 11, 31);
+      
+      for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+        const day = d.getDay();
+        const dateStr = d.toISOString().split('T')[0];
+        
+        if (day === 0) { // Sunday
+          inserts.push({
+            name: 'Weekly Holiday - Sunday',
+            date: dateStr,
+            description: JSON.stringify({ notes: 'Sunday Weekly Rest Day', type: 'Weekly Holiday', is_paid: true })
+          });
+        } else if (day === 6 && weekendsType === 'both') { // Saturday
+          inserts.push({
+            name: 'Weekly Holiday - Saturday',
+            date: dateStr,
+            description: JSON.stringify({ notes: 'Saturday Weekly Rest Day', type: 'Weekly Holiday', is_paid: true })
+          });
+        }
+      }
+      
+      let addedCount = 0;
+      for (const ins of inserts) {
+        const { error } = await supabase.from('holidays').insert([ins]);
+        if (!error) addedCount++;
+      }
+      
+      await logAudit(req, 'GENERATE_WEEKENDS', `holidays/weekends-${year}`, null, { addedCount, weekendsType });
+      res.json({ message: `Successfully generated ${addedCount} weekend holidays for ${year}.` });
+    } catch (err) {
+      console.error('generateWeekends Error:', err.message);
+      res.status(500).json({ message: 'Error generating weekend holidays.' });
+    }
+  },
+
+  cloneHolidays: async (req, res) => {
+    const { fromYear, toYear } = req.body;
+    try {
+      if (!fromYear || !toYear) {
+        return res.status(400).json({ message: 'fromYear and toYear are required.' });
+      }
+      const fYear = parseInt(fromYear, 10);
+      const tYear = parseInt(toYear, 10);
+      
+      const { data: sourceHolidays, error } = await supabase
+        .from('holidays')
+        .select('*')
+        .gte('date', `${fYear}-01-01`)
+        .lte('date', `${fYear}-12-31`);
+         
+      if (error) throw error;
+      if (!sourceHolidays || sourceHolidays.length === 0) {
+        return res.status(404).json({ message: `No holidays found for source year ${fromYear}.` });
+      }
+      
+      let clonedCount = 0;
+      for (const h of sourceHolidays) {
+        const sourceDate = new Date(h.date);
+        const targetDate = new Date(tYear, sourceDate.getMonth(), sourceDate.getDate());
+        const targetDateStr = targetDate.toISOString().split('T')[0];
+        
+        const { error: insErr } = await supabase.from('holidays').insert([{
+          name: h.name,
+          date: targetDateStr,
+          description: h.description
+        }]);
+        if (!insErr) clonedCount++;
+      }
+      
+      await logAudit(req, 'CLONE_HOLIDAYS', `holidays/clone-${fYear}-to-${tYear}`, null, { clonedCount });
+      res.json({ message: `Successfully copied ${clonedCount} holidays to year ${toYear}.` });
+    } catch (err) {
+      console.error('cloneHolidays Error:', err.message);
+      res.status(500).json({ message: 'Error copying holidays.' });
+    }
+  },
+
+  getMonthlyPayrollSummary: async (req, res) => {
+    const { month, year, employeeId } = req.query;
+    if (!month || !year) {
+      return res.status(400).json({ message: 'Month and year are required.' });
+    }
+    
+    const m = parseInt(month, 10);
+    const y = parseInt(year, 10);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    
+    const startStr = `${y}-${String(m).padStart(2, '0')}-01`;
+    const endStr = `${y}-${String(m).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+    
+    try {
+      const { data: dbSettings } = await supabase.from('system_settings').select('*');
+      const settingsMap = {};
+      (dbSettings || []).forEach(s => { settingsMap[s.setting_key] = s.setting_value; });
+      
+      const cutAbsent = parseFloat(settingsMap.paycut_absent || 100);
+      const cutLop = parseFloat(settingsMap.paycut_lop || 100);
+      const cutHalfDay = parseFloat(settingsMap.paycut_half_day || 50);
+      
+      let empQuery = supabase.from('employees').select('id, employee_id, full_name, joining_salary, departments(name)').eq('status', 'Active').is('deleted_at', null);
+      if (employeeId) {
+        empQuery = empQuery.eq('id', employeeId);
+      }
+      const { data: employees, error: empErr } = await empQuery;
+      if (empErr) throw empErr;
+      
+      const { data: holidays, error: holErr } = await supabase.from('holidays').select('*').gte('date', startStr).lte('date', endStr);
+      if (holErr) throw holErr;
+      
+      const { data: logs, error: logErr } = await supabase.from('attendance_logs').select('*').gte('date', startStr).lte('date', endStr);
+      if (logErr) throw logErr;
+      
+      const { data: allLeaves } = await supabase.from('leave_requests').select('*, leave_types(code)').eq('status', 'Approved');
+      
+      const holidaysSet = {};
+      (holidays || []).forEach(h => {
+        let isPaid = true;
+        try {
+          const parsed = JSON.parse(h.description);
+          isPaid = parsed.is_paid !== false;
+        } catch (e) {}
+        if (isPaid) {
+          holidaysSet[h.date] = h.name;
+        }
+      });
+      
+      const payrollList = [];
+      
+      for (const emp of employees) {
+        const baseSalary = parseFloat(emp.joining_salary || 0);
+        const perDayPay = parseFloat((baseSalary / daysInMonth).toFixed(2));
+        
+        let presentDays = 0;
+        let lateDays = 0;
+        let halfDays = 0;
+        let absentDays = 0;
+        let clTaken = 0;
+        let slTaken = 0;
+        let elTaken = 0;
+        let lopTaken = 0;
+        let holidayWorkDays = 0;
+        let totalHours = 0;
+        
+        const empLogs = (logs || []).filter(l => l.employee_id === emp.id);
+        const empLogsMap = {};
+        empLogs.forEach(l => { empLogsMap[l.date] = l; });
+        
+        const empLeavesMap = {};
+        (allLeaves || [])
+          .filter(r => r.employee_id === emp.id)
+          .forEach(r => {
+            const start = new Date(r.from_date);
+            const end = new Date(r.to_date);
+            for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+              const dateStr = d.toISOString().split('T')[0];
+              empLeavesMap[dateStr] = r.leave_types?.code || 'LOP';
+            }
+          });
+          
+        for (let day = 1; day <= daysInMonth; day++) {
+          const dateObj = new Date(y, m - 1, day);
+          const dateStr = dateObj.toISOString().split('T')[0];
+          const dayOfWeek = dateObj.getDay();
+          
+          const log = empLogsMap[dateStr];
+          const isWeekend = (dayOfWeek === 0);
+          const isHoliday = !!holidaysSet[dateStr] || isWeekend;
+          
+          if (log) {
+            totalHours += parseFloat(log.total_hours || 0);
+            if (isHoliday) {
+              holidayWorkDays++;
+            } else {
+              if (log.status === 'Leave') {
+                const leaveCode = empLeavesMap[dateStr] || 'LOP';
+                if (leaveCode === 'CL') clTaken++;
+                else if (leaveCode === 'SL') slTaken++;
+                else if (leaveCode === 'EL') elTaken++;
+                else lopTaken++;
+              } else {
+                presentDays++;
+                if (log.status === 'Late') lateDays++;
+                if (log.status === 'Half Day') halfDays++;
+              }
+            }
+          } else {
+            if (isHoliday) {
+              // Paid rest day
+            } else {
+              const leaveCode = empLeavesMap[dateStr];
+              if (leaveCode) {
+                if (leaveCode === 'CL') clTaken++;
+                else if (leaveCode === 'SL') slTaken++;
+                else if (leaveCode === 'EL') elTaken++;
+                else lopTaken++;
+              } else {
+                absentDays++;
+              }
+            }
+          }
+        }
+        
+        const unpaidDays = lopTaken + absentDays;
+        
+        let compensatedAbsent = 0;
+        let compensatedLop = 0;
+        
+        if (absentDays > 0) {
+          compensatedAbsent = Math.min(absentDays, holidayWorkDays);
+        }
+        if (holidayWorkDays - compensatedAbsent > 0) {
+          compensatedLop = Math.min(lopTaken, holidayWorkDays - compensatedAbsent);
+        }
+        
+        const compensatedDays = compensatedAbsent + compensatedLop;
+        const remainingHolidayWorkDays = holidayWorkDays - compensatedDays;
+        
+        const effectiveAbsent = absentDays - compensatedAbsent;
+        const effectiveLop = lopTaken - compensatedLop;
+        
+        const absentCut = effectiveAbsent * perDayPay * (cutAbsent / 100);
+        const lopCut = effectiveLop * perDayPay * (cutLop / 100);
+        const halfDayCut = halfDays * perDayPay * (cutHalfDay / 100);
+        
+        const totalPayCut = parseFloat((absentCut + lopCut + halfDayCut).toFixed(2));
+        const overtimePay = parseFloat((remainingHolidayWorkDays * perDayPay).toFixed(2));
+        const netPayout = parseFloat((baseSalary - totalPayCut + overtimePay).toFixed(2));
+        
+        payrollList.push({
+          employee_id_val: emp.id,
+          employee_id: emp.employee_id,
+          full_name: emp.full_name,
+          department_name: emp.departments ? emp.departments.name : 'Unassigned',
+          base_salary: baseSalary,
+          per_day_pay: perDayPay,
+          days_present: presentDays,
+          days_late: lateDays,
+          days_half_day: halfDays,
+          days_absent: absentDays,
+          cl_taken: clTaken,
+          sl_taken: slTaken,
+          el_taken: elTaken,
+          lop_taken: lopTaken,
+          holiday_work_days: holidayWorkDays,
+          compensated_days: compensatedDays,
+          extra_working_days: remainingHolidayWorkDays,
+          total_pay_cut: totalPayCut,
+          overtime_pay: overtimePay,
+          net_payout: netPayout,
+          total_hours: parseFloat(totalHours.toFixed(2))
+        });
+      }
+      
+      res.json(payrollList);
+    } catch (err) {
+      console.error('getMonthlyPayrollSummary Error:', err.message);
+      res.status(500).json({ message: 'Error calculating payroll summary.' });
+    }
   }
 };
 

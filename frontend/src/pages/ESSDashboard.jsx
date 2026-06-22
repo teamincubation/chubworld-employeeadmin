@@ -292,7 +292,7 @@ export default function ESSDashboard() {
                 return (
                   <div key={idx} style={{ padding: '16px 12px', backgroundColor: 'var(--chub-light-lavender)', borderRadius: '12px' }}>
                     <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--chub-purple)', textTransform: 'uppercase' }}>
-                      {bal.leave_code}
+                      {bal.leave_name || bal.leave_code}
                     </span>
                     <h4 style={{ fontSize: '28px', color: 'var(--chub-purple)', margin: '8px 0 2px 0' }}>{available}</h4>
                     <span style={{ fontSize: '10px', color: 'var(--chub-muted)' }}>Available Days</span>

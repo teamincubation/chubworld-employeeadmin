@@ -133,6 +133,11 @@ router.post('/attendance/corrections', authenticateToken, attendanceController.s
 router.get('/attendance/corrections', authenticateToken, requirePermission('attendance:view'), attendanceController.listCorrections);
 router.post('/attendance/corrections/:correctionId/approve', authenticateToken, requirePermission('attendance:edit'), attendanceController.approveCorrection);
 
+// Admin manual overrides
+router.post('/attendance/admin-add', authenticateToken, requirePermission('attendance:edit'), attendanceController.adminAddAttendance);
+router.put('/attendance/admin-update/:id', authenticateToken, requirePermission('attendance:edit'), attendanceController.adminUpdateAttendance);
+
+
 /* =========================================================================
    6. LEAVE MANAGEMENT MODULE ROUTES
    ========================================================================= */
@@ -144,6 +149,7 @@ router.get('/leaves/admin-requests', authenticateToken, requirePermission('leave
 router.post('/leaves/approve/:id', authenticateToken, requirePermission('leave:approve'), leaveController.approveLeave);
 router.post('/leaves/adjust', authenticateToken, requirePermission('leave:manage'), leaveController.adjustBalance);
 router.get('/leaves/types', authenticateToken, leaveController.getLeaveTypes);
+router.put('/leaves/types', authenticateToken, requirePermission('leave:manage'), leaveController.updateLeaveTypes);
 
 /* =========================================================================
    7. SECURITY & ENCRYPTION CENTER ROUTES
@@ -169,6 +175,18 @@ router.put('/security/roles/:roleId/permissions', authenticateToken, requirePerm
 
 router.get('/security/settings', authenticateToken, requirePermission('security:settings'), securityController.getSystemSettings);
 router.put('/security/settings', authenticateToken, requirePermission('security:settings'), securityController.updateSystemSettings);
+
+// Holiday Management Calendar
+router.get('/security/holidays', authenticateToken, requirePermission('security:settings'), securityController.getHolidays);
+router.post('/security/holidays', authenticateToken, requirePermission('security:settings'), securityController.createHoliday);
+router.put('/security/holidays/:id', authenticateToken, requirePermission('security:settings'), securityController.updateHoliday);
+router.delete('/security/holidays/:id', authenticateToken, requirePermission('security:settings'), securityController.deleteHoliday);
+router.post('/security/holidays/generate-weekends', authenticateToken, requirePermission('security:settings'), securityController.generateWeekends);
+router.post('/security/holidays/clone', authenticateToken, requirePermission('security:settings'), securityController.cloneHolidays);
+
+// Monthly Attendance and Payroll summaries for Reports
+router.get('/reports/attendance-summary', authenticateToken, requirePermission('attendance:view'), attendanceController.getMonthlyAttendanceSummary);
+router.get('/reports/payroll-summary', authenticateToken, requirePermission('payroll:view'), securityController.getMonthlyPayrollSummary);
 
 router.get('/security/licensing', authenticateToken, securityController.getLicensing);
 router.put('/security/licensing', authenticateToken, securityController.updateLicensing);

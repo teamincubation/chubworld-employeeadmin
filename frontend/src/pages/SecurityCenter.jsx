@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { 
   ShieldCheck, Lock, ToggleLeft, ToggleRight, Key, 
   MapPin, Settings, AlertTriangle, ShieldAlert, 
-  CheckCircle, Plus, Edit3, Trash2, Building, Users
+  CheckCircle, Plus, Edit3, Trash2, Building, Users, Calendar
 } from 'lucide-react';
 
 export default function SecurityCenter() {
@@ -15,11 +15,22 @@ export default function SecurityCenter() {
   const [users, setUsers] = useState([]);
   const [locations, setLocations] = useState([]);
   const [settings, setSettings] = useState({});
+  const [leaveTypes, setLeaveTypes] = useState([]);
+  const [holidays, setHolidays] = useState([]);
+  const [holidayYear, setHolidayYear] = useState(new Date().getFullYear());
   const [ipLocations, setIpLocations] = useState({});
   const [departments, setDepartments] = useState([]);
   const [designations, setDesignations] = useState([]);
   const [selectedDeptFilter, setSelectedDeptFilter] = useState('');
   
+  // Holiday Modals & Forms
+  const [showHolidayModal, setShowHolidayModal] = useState(false);
+  const [holidayForm, setHolidayForm] = useState({ id: null, name: '', date: '', description: '', type: 'Public Holiday', is_paid: true });
+  const [showGenerateWeekendsModal, setShowGenerateWeekendsModal] = useState(false);
+  const [weekendsType, setWeekendsType] = useState('both'); // 'sunday' or 'both'
+  const [showCloneHolidaysModal, setShowCloneHolidaysModal] = useState(false);
+  const [cloneTargetYear, setCloneTargetYear] = useState(new Date().getFullYear() + 1);
+
   // Organization Modals
   const [showDeptModal, setShowDeptModal] = useState(false);
   const [deptForm, setDeptForm] = useState({ id: null, name: '' });
@@ -27,7 +38,7 @@ export default function SecurityCenter() {
   const [desigForm, setDesigForm] = useState({ id: null, name: '', department_id: '' });
   
   // Tab control
-  const [activeTab, setActiveTab] = useState('audits'); // 'audits', 'users', 'locations', 'settings', 'subadmins'
+  const [activeTab, setActiveTab] = useState('audits'); // 'audits', 'users', 'locations', 'organization', 'settings', 'sessions', 'subadmins', 'holidays'
   const [sessionsList, setSessionsList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -201,7 +212,7 @@ export default function SecurityCenter() {
 
   useEffect(() => {
     fetchData();
-  }, [activeTab]);
+  }, [activeTab, holidayYear]);
 
   useEffect(() => {
     const resolveIps = async () => {
@@ -327,6 +338,12 @@ export default function SecurityCenter() {
         const obj = {};
         list.forEach(s => { obj[s.setting_key] = s.setting_value; });
         setSettings(obj);
+        
+        const lts = await request('/leaves/types');
+        setLeaveTypes(lts || []);
+      } else if (activeTab === 'holidays') {
+        const list = await request(`/security/holidays?year=${holidayYear}`);
+        setHolidays(list || []);
       } else if (activeTab === 'sessions') {
         const list = await request('/security/active-sessions');
         setSessionsList(list || []);
@@ -466,9 +483,116 @@ export default function SecurityCenter() {
         method: 'PUT',
         body: { settings }
       });
+      await request('/leaves/types', {
+        method: 'PUT',
+        body: { leaveTypes }
+      });
       alert('System configurations saved successfully.');
+      fetchData();
     } catch (err) {
       alert(err.message);
+    }
+  };
+
+  const handleSaveHoliday = async (e) => {
+    e.preventDefault();
+    try {
+      if (holidayForm.id) {
+        await request(`/security/holidays/${holidayForm.id}`, {
+          method: 'PUT',
+          body: holidayForm
+        });
+        alert('Holiday updated successfully.');
+      } else {
+        await request('/security/holidays', {
+          method: 'POST',
+          body: holidayForm
+        });
+        alert('Holiday created successfully.');
+      }
+      setShowHolidayModal(false);
+      fetchData();
+    } catch (err) {
+      alert(err.message || 'Error saving holiday.');
+    }
+  };
+
+  const handleDeleteHoliday = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this holiday?')) return;
+    try {
+      await request(`/security/holidays/${id}`, {
+        method: 'DELETE'
+      });
+      alert('Holiday deleted successfully.');
+      fetchData();
+    } catch (err) {
+      alert(err.message || 'Error deleting holiday.');
+    }
+  };
+
+  const handleGenerateWeekends = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await request('/security/holidays/generate-weekends', {
+        method: 'POST',
+        body: { year: holidayYear, weekendsType }
+      });
+      alert(res.message);
+      setShowGenerateWeekendsModal(false);
+      fetchData();
+    } catch (err) {
+      alert(err.message || 'Error generating weekends.');
+    }
+  };
+
+  const handleCloneHolidays = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await request('/security/holidays/clone', {
+        method: 'POST',
+        body: { fromYear: holidayYear, toYear: cloneTargetYear }
+      });
+      alert(res.message);
+      setShowCloneHolidaysModal(false);
+      fetchData();
+    } catch (err) {
+      alert(err.message || 'Error copying holidays.');
+    }
+  };
+
+  const handleFetchNagerHolidays = async () => {
+    if (!window.confirm(`Do you want to fetch and import standard Indian public holidays for ${holidayYear}?`)) return;
+    try {
+      setLoading(true);
+      const res = await fetch(`https://date.nager.at/api/v3/publicholidays/${holidayYear}/IN`);
+      if (!res.ok) throw new Error('Failed to retrieve holidays from Nager.Date API.');
+      const data = await res.json();
+      
+      let importCount = 0;
+      for (const h of data) {
+        try {
+          await request('/security/holidays', {
+            method: 'POST',
+            body: {
+              name: h.localName || h.name,
+              date: h.date,
+              description: 'National Public Holiday',
+              type: 'Public Holiday',
+              is_paid: true
+            }
+          });
+          importCount++;
+        } catch (err) {
+          // Ignore duplicate records
+        }
+      }
+      
+      alert(`Imported ${importCount} public holidays for India successfully.`);
+      fetchData();
+    } catch (err) {
+      alert(err.message || 'Error fetching holidays.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -532,6 +656,7 @@ export default function SecurityCenter() {
           { key: 'locations', name: 'Geofence Boundaries', icon: MapPin },
           { key: 'organization', name: 'Org Structure', icon: Building },
           { key: 'settings', name: 'System Parameters', icon: Settings },
+          { key: 'holidays', name: 'Holiday Calendar', icon: Calendar },
           ...((user?.role === 'Super Admin' || user?.role === 'Admin Controller') ? [
             { key: 'sessions', name: 'Active Sessions', icon: ShieldAlert },
             { key: 'subadmins', name: 'Manage Sub-Admins', icon: Users }
@@ -1099,6 +1224,58 @@ export default function SecurityCenter() {
                       <option value="false">Disabled (Open Clockings)</option>
                     </select>
                   </div>
+                  {/* Default Base Leaves Allocation */}
+                  <h4 style={{ color: 'var(--chub-purple)', fontSize: '14px', margin: '24px 0 12px 0' }}>Default Base Leaves Allocation (New Onboardings)</h4>
+                  <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '16px' }}>
+                    {leaveTypes.map((lt, idx) => (
+                      <div className="form-group" key={lt.id}>
+                        <label className="form-label">{lt.name} ({lt.code})</label>
+                        <input 
+                          type="number" 
+                          className="form-control" 
+                          value={lt.max_days} 
+                          onChange={(e) => {
+                            const newList = [...leaveTypes];
+                            newList[idx].max_days = parseInt(e.target.value, 10) || 0;
+                            setLeaveTypes(newList);
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Non-Paid Leave Salary Cut Policies */}
+                  <h4 style={{ color: 'var(--chub-purple)', fontSize: '14px', margin: '24px 0 12px 0' }}>Non-Paid Leave Salary Cut Policies</h4>
+                  <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '16px' }}>
+                    <div className="form-group">
+                      <label className="form-label">Unexcused Absence Cut (%)</label>
+                      <input 
+                        type="number" 
+                        className="form-control" 
+                        value={settings.paycut_absent === undefined ? 100 : settings.paycut_absent} 
+                        onChange={(e) => setSettings({ ...settings, paycut_absent: e.target.value })}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Loss of Pay (LOP) Cut (%)</label>
+                      <input 
+                        type="number" 
+                        className="form-control" 
+                        value={settings.paycut_lop === undefined ? 100 : settings.paycut_lop} 
+                        onChange={(e) => setSettings({ ...settings, paycut_lop: e.target.value })}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Half Day Work Cut (%)</label>
+                      <input 
+                        type="number" 
+                        className="form-control" 
+                        value={settings.paycut_half_day === undefined ? 50 : settings.paycut_half_day} 
+                        onChange={(e) => setSettings({ ...settings, paycut_half_day: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
                   <h4 style={{ color: 'var(--chub-purple)', fontSize: '14px', margin: '24px 0 12px 0' }}>SMTP E-Mail Server Settings (Hostinger Config)</h4>
                   <div className="form-group">
                     <label className="form-label">SMTP Host</label>
@@ -1327,7 +1504,144 @@ export default function SecurityCenter() {
               </div>
             )}
 
+            {/* 6. HOLIDAY CALENDAR TAB */}
+            {activeTab === 'holidays' && (
+              <div>
+                <div className="flex-between" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '16px' }}>
+                  <div>
+                    <h3 style={{ fontSize: '18px', margin: 0, color: 'var(--chub-purple)' }}>Holiday & Weekend Calendar</h3>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px' }}>
+                      Configure standard holidays, weekly weekends, and clone them for upcoming fiscal terms.
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <label className="form-label" style={{ margin: 0, fontSize: '13px' }}>Year Filter:</label>
+                    <select 
+                      className="form-control" 
+                      value={holidayYear} 
+                      onChange={(e) => setHolidayYear(Number(e.target.value))}
+                      style={{ width: '100px', height: '36px', padding: '0 8px' }}
+                    >
+                      {Array.from({ length: 5 }, (_, i) => {
+                        const yr = new Date().getFullYear() - 2 + i;
+                        return <option key={yr} value={yr}>{yr}</option>;
+                      })}
+                    </select>
+                    <button onClick={handleFetchNagerHolidays} className="btn btn-secondary" style={{ padding: '8px 12px', fontSize: '13px' }}>
+                      Fetch India Holidays
+                    </button>
+                    <button onClick={() => setShowGenerateWeekendsModal(true)} className="btn btn-secondary" style={{ padding: '8px 12px', fontSize: '13px' }}>
+                      Generate Weekends
+                    </button>
+                    <button onClick={() => setShowCloneHolidaysModal(true)} className="btn btn-secondary" style={{ padding: '8px 12px', fontSize: '13px' }}>
+                      Clone Year
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setHolidayForm({ id: null, name: '', date: `${holidayYear}-01-01`, description: '', type: 'Public Holiday', is_paid: true });
+                        setShowHolidayModal(true);
+                      }} 
+                      className="btn btn-primary"
+                      style={{ padding: '8px 12px', fontSize: '13px' }}
+                    >
+                      <Plus size={14} /> Add Holiday
+                    </button>
+                  </div>
+                </div>
 
+                <div className="table-container">
+                  <table className="custom-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Holiday Name</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th>Description / Notes</th>
+                        <th style={{ width: '100px', textAlign: 'center' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {holidays.length === 0 ? (
+                        <tr>
+                          <td colSpan="6" style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>
+                            No holidays configured for {holidayYear}.
+                          </td>
+                        </tr>
+                      ) : (
+                        holidays.map((h) => {
+                          let notes = '';
+                          let type = 'Public Holiday';
+                          let isPaid = true;
+                          try {
+                            if (h.description && (h.description.startsWith('{') || h.description.startsWith('['))) {
+                              const parsed = JSON.parse(h.description);
+                              notes = parsed.notes || '';
+                              type = parsed.type || 'Public Holiday';
+                              isPaid = parsed.is_paid !== false;
+                            } else {
+                              notes = h.description || '';
+                            }
+                          } catch (e) {
+                            notes = h.description || '';
+                          }
+
+                          return (
+                            <tr key={h.id}>
+                              <td style={{ fontWeight: 600, fontFamily: 'monospace' }}>
+                                {h.date}
+                              </td>
+                              <td style={{ fontWeight: 600 }}>{h.name}</td>
+                              <td>
+                                <span className={`badge ${type === 'Weekly Holiday' ? 'badge-active' : 'badge-kyc-pending'}`}>
+                                  {type}
+                                </span>
+                              </td>
+                              <td>
+                                <span className={`badge ${isPaid ? 'badge-active' : 'badge-inactive'}`}>
+                                  {isPaid ? 'Paid' : 'Unpaid'}
+                                </span>
+                              </td>
+                              <td style={{ color: 'var(--text-muted)', fontSize: '13px' }}>{notes || 'N/A'}</td>
+                              <td>
+                                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                  <button 
+                                    onClick={() => {
+                                      setHolidayForm({
+                                        id: h.id,
+                                        name: h.name,
+                                        date: h.date,
+                                        description: notes,
+                                        type: type,
+                                        is_paid: isPaid
+                                      });
+                                      setShowHolidayModal(true);
+                                    }} 
+                                    className="btn btn-secondary"
+                                    style={{ padding: '6px 10px', border: 'none' }}
+                                    title="Edit Holiday"
+                                  >
+                                    <Plus size={14} style={{ color: 'var(--chub-pink)' }} />
+                                  </button>
+                                  <button 
+                                    onClick={() => handleDeleteHoliday(h.id)}
+                                    className="btn btn-secondary"
+                                    style={{ padding: '6px 10px', border: 'none' }}
+                                    title="Delete Holiday"
+                                  >
+                                    <Trash2 size={14} style={{ color: 'var(--color-error)' }} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
           </div>
         )}
@@ -1590,6 +1904,155 @@ export default function SecurityCenter() {
                 </button>
                 <button type="submit" className="btn btn-primary">
                   {subAdminForm.id ? 'Save Changes' : 'Create Account'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ADD / EDIT HOLIDAY MODAL */}
+      {showHolidayModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '440px' }}>
+            <h3 style={{ marginBottom: '20px' }}>
+              {holidayForm.id ? 'Modify Holiday Details' : 'Configure New Holiday'}
+            </h3>
+            <form onSubmit={handleSaveHoliday}>
+              <div className="form-group">
+                <label className="form-label">Holiday Name *</label>
+                <input 
+                  type="text" 
+                  className="form-control" 
+                  placeholder="e.g. Independence Day"
+                  value={holidayForm.name}
+                  onChange={(e) => setHolidayForm({ ...holidayForm, name: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Holiday Date *</label>
+                <input 
+                  type="date" 
+                  className="form-control" 
+                  value={holidayForm.date}
+                  onChange={(e) => setHolidayForm({ ...holidayForm, date: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Holiday Type *</label>
+                <select 
+                  className="form-control"
+                  value={holidayForm.type}
+                  onChange={(e) => setHolidayForm({ ...holidayForm, type: e.target.value })}
+                  required
+                >
+                  <option value="Public Holiday">Public Holiday</option>
+                  <option value="Weekly Holiday">Weekly Holiday</option>
+                  <option value="Rest Day">Rest Day</option>
+                  <option value="Company Holiday">Company Holiday</option>
+                </select>
+              </div>
+
+              <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginTop: '12px' }}>
+                <input 
+                  type="checkbox"
+                  id="holiday_is_paid"
+                  checked={holidayForm.is_paid}
+                  onChange={(e) => setHolidayForm({ ...holidayForm, is_paid: e.target.checked })}
+                  style={{ width: '16px', height: '16px', accentColor: 'var(--chub-pink)' }}
+                /> 
+                <label htmlFor="holiday_is_paid" style={{ fontSize: '14px', cursor: 'pointer', margin: 0 }}>Is this a paid holiday?</label>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Notes / Description</label>
+                <textarea 
+                  className="form-control" 
+                  rows="3"
+                  placeholder="Additional context or compliance notes"
+                  value={holidayForm.description}
+                  onChange={(e) => setHolidayForm({ ...holidayForm, description: e.target.value })}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+                <button type="button" onClick={() => setShowHolidayModal(false)} className="btn btn-secondary">
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Save Holiday
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* GENERATE WEEKENDS MODAL */}
+      {showGenerateWeekendsModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '380px' }}>
+            <h3 style={{ marginBottom: '16px' }}>Generate Weekend Holidays</h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+              Automatically bulk-insert Saturdays and Sundays as weekly rest days for the year <strong>{holidayYear}</strong>. Duplicate dates will be skipped automatically.
+            </p>
+            <form onSubmit={handleGenerateWeekends}>
+              <div className="form-group">
+                <label className="form-label">Weekend Day Preference *</label>
+                <select 
+                  className="form-control"
+                  value={weekendsType}
+                  onChange={(e) => setWeekendsType(e.target.value)}
+                  required
+                >
+                  <option value="both">Both Saturday & Sunday</option>
+                  <option value="sunday">Sunday Only</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+                <button type="button" onClick={() => setShowGenerateWeekendsModal(false)} className="btn btn-secondary">
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Generate
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CLONE HOLIDAYS MODAL */}
+      {showCloneHolidaysModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '380px' }}>
+            <h3 style={{ marginBottom: '16px' }}>Clone Holidays to Next Year</h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+              Copy all holidays from the selected year <strong>{holidayYear}</strong> into a target year. Dates will be shifted to match the same month and day of the target year.
+            </p>
+            <form onSubmit={handleCloneHolidays}>
+              <div className="form-group">
+                <label className="form-label">Target Year *</label>
+                <input 
+                  type="number"
+                  className="form-control"
+                  value={cloneTargetYear}
+                  onChange={(e) => setCloneTargetYear(Number(e.target.value))}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+                <button type="button" onClick={() => setShowCloneHolidaysModal(false)} className="btn btn-secondary">
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Copy Holidays
                 </button>
               </div>
             </form>

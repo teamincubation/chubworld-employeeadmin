@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Clock, MapPin, CheckCircle, ShieldAlert, Navigation } from 'lucide-react';
+import { Clock, MapPin, CheckCircle, ShieldAlert, Navigation, Calendar } from 'lucide-react';
 
 export default function ESSClockIn() {
   const { request } = useAuth();
   
   // Status state
-  const [status, setStatus] = useState('not_clocked_in'); // 'not_clocked_in', 'clocked_in', 'clocked_out'
+  const [status, setStatus] = useState('not_clocked_in'); // 'not_clocked_in', 'clocked_in', 'clocked_out', 'holiday'
   const [record, setRecord] = useState(null);
   const [shift, setShift] = useState(null);
+  const [holidayName, setHolidayName] = useState('');
   const [loading, setLoading] = useState(true);
 
   // Live IST Clock
@@ -45,6 +46,9 @@ export default function ESSClockIn() {
       setStatus(data.status);
       setRecord(data.record);
       setShift(data.shift);
+      if (data.status === 'holiday') {
+        setHolidayName(data.holidayName || 'Scheduled Holiday');
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -191,7 +195,27 @@ export default function ESSClockIn() {
               <span style={{ fontSize: '18px', fontFamily: 'Poppins', fontWeight: 'bold' }}>COMPLETED</span>
             </div>
           )}
+
+          {status === 'holiday' && (
+            <div style={{
+              width: '180px', height: '180px', borderRadius: '50%',
+              backgroundColor: 'rgba(216, 90, 166, 0.1)', color: 'var(--chub-pink)',
+              display: 'inline-flex', flexDirection: 'column', alignItems: 'center',
+              justifyContent: 'center', gap: '8px', border: '3px dashed var(--chub-pink)',
+              margin: '0 auto'
+            }}>
+              <Calendar size={36} />
+              <span style={{ fontSize: '18px', fontFamily: 'Poppins', fontWeight: 'bold' }}>HOLIDAY</span>
+            </div>
+          )}
         </div>
+
+        {status === 'holiday' && (
+          <div className="alert alert-info" style={{ marginTop: '16px', justifyContent: 'center' }}>
+            <Calendar size={18} />
+            <span>Today is a scheduled paid leave holiday: <strong>{holidayName}</strong>. Self clock-in is disabled.</span>
+          </div>
+        )}
 
         {/* GPS location diagnostics */}
         <div style={{

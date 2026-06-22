@@ -404,6 +404,31 @@ const leaveController = {
       console.error('GetLeaveTypes Error:', err.message);
       res.status(500).json({ message: 'Error loading leave types.' });
     }
+  },
+
+  // Update default base leave allocations
+  updateLeaveTypes: async (req, res) => {
+    const { leaveTypes } = req.body;
+    try {
+      if (!Array.isArray(leaveTypes)) {
+        return res.status(400).json({ message: 'Invalid leaveTypes format.' });
+      }
+
+      for (const lt of leaveTypes) {
+        const { code, max_days } = lt;
+        const { error } = await supabase
+          .from('leave_types')
+          .update({ max_days: parseInt(max_days, 10) })
+          .eq('code', code);
+        if (error) throw error;
+      }
+
+      await logAudit(req, 'UPDATE_LEAVE_TYPES', 'leave_types', null, leaveTypes);
+      res.json({ message: 'Base leave allocations updated successfully.' });
+    } catch (err) {
+      console.error('UpdateLeaveTypes Error:', err.message);
+      res.status(500).json({ message: 'Error updating base leave allocations.' });
+    }
   }
 };
 

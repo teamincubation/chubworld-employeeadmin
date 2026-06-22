@@ -164,7 +164,14 @@ const attendanceController = {
 
       const shift = (assignments && assignments.length > 0 && assignments[0].shifts) ? assignments[0].shifts : null;
 
+      // Check if today is a holiday
+      const { data: holidays } = await supabase.from('holidays').select('*').eq('date', todayStr).limit(1);
+      const holidayName = holidays && holidays.length > 0 ? holidays[0].name : null;
+
       if (!logs || logs.length === 0) {
+        if (holidayName) {
+          return res.json({ status: 'holiday', holidayName, shift });
+        }
         return res.json({ status: 'not_clocked_in', shift });
       }
 
@@ -195,6 +202,12 @@ const attendanceController = {
       const istDateObj = getISTDate();
       const todayStr = getISTDateString(istDateObj);
       const nowTimeStr = getISTTimeString(istDateObj);
+
+      // Block clock-in on holidays
+      const { data: holidayMatch } = await supabase.from('holidays').select('name').eq('date', todayStr).limit(1);
+      if (holidayMatch && holidayMatch.length > 0) {
+        return res.status(400).json({ message: `Clock-in blocked: Today is a scheduled holiday (${holidayMatch[0].name}).` });
+      }
 
       // Prevent duplicate clock-in
       const { data: existing } = await supabase.from('attendance_logs').select('id').eq('employee_id', employeeId).eq('date', todayStr);
@@ -541,6 +554,343 @@ const attendanceController = {
     } catch (err) {
       console.error('GetAdminLogs Error:', err.message);
       res.status(500).json({ message: 'Error retrieving employee logs.' });
+    }
+  },
+
+  // Add manual attendance (Admin)
+  adminAddAttendance: async (req, res) => {
+    const { employeeId, date, clockInTime, clockOutTime, clockInLocationStatus, clockOutLocationStatus } = req.body;
+    try {
+      if (!employeeId || !date || !clockInTime) {
+        return res.status(400).json({ message: 'Employee, date, and clock-in time are required.' });
+      }
+      
+      let activeHours = 0.00;
+      if (clockInTime && clockOutTime) {
+        const [inH, inM] = clockInTime.split(':').map(Number);
+        const [outH, outM] = clockOutTime.split(':').map(Number);
+        activeHours = parseFloat((((outH * 60 + outM) - (inH * 60 + inM)) / 60).toFixed(2));
+      }
+      
+      const { data: assignments } = await supabase
+        .from('employee_shift_assignments')
+        .select('shifts(*)')
+        .eq('employee_id', employeeId)
+        .or(`end_date.is.null,end_date.gte.${date}`)
+        .limit(1);
+        
+      let recordStatus = 'Present';
+      if (assignments && assignments.length > 0 && assignments[0].shifts) {
+        const shift = assignments[0].shifts;
+        const [shHour, shMin] = shift.start_time.split(':').map(Number);
+        const [inHour, inMin] = clockInTime.split(':').map(Number);
+        
+        const shiftStartMins = shHour * 60 + shMin;
+        const clockInMins = inHour * 60 + inMin;
+        
+        if (clockInMins > (shiftStartMins + shift.grace_period_minutes)) {
+          recordStatus = 'Late';
+        }
+      }
+      
+      if (activeHours < 4.0 && clockOutTime) {
+        recordStatus = 'Half Day';
+      }
+      
+      if (clockInLocationStatus === 'Location Not Verified') {
+        recordStatus = 'Location Not Verified';
+      }
+
+      const { data: existing } = await supabase.from('attendance_logs').select('id').eq('employee_id', employeeId).eq('date', date);
+      if (existing && existing.length > 0) {
+        return res.status(400).json({ message: 'An attendance record already exists for this employee on this date.' });
+      }
+
+      const { data: inserted, error } = await supabase.from('attendance_logs').insert([{
+        employee_id: employeeId,
+        date,
+        clock_in_time: clockInTime,
+        clock_out_time: clockOutTime || null,
+        clock_in_ip: 'admin added',
+        clock_out_ip: clockOutTime ? 'admin added' : null,
+        clock_in_location_status: clockInLocationStatus || 'Verified-Inside',
+        clock_out_location_status: clockOutLocationStatus || 'Verified-Inside',
+        total_hours: activeHours,
+        status: recordStatus
+      }]).select();
+
+      if (error) throw error;
+      
+      await logAudit(req, 'ADMIN_ADD_ATTENDANCE', `attendance_logs/${inserted[0].id}`, null, inserted[0]);
+      res.status(201).json({ message: 'Attendance record manually added successfully.', log: inserted[0] });
+    } catch (err) {
+      console.error('adminAddAttendance Error:', err.message);
+      res.status(500).json({ message: 'Error adding attendance record.' });
+    }
+  },
+
+  // Edit manual or employee attendance (Admin)
+  adminUpdateAttendance: async (req, res) => {
+    const { id } = req.params;
+    const { clockInTime, clockOutTime, clockInLocationStatus, clockOutLocationStatus } = req.body;
+    try {
+      const { data: oldData } = await supabase.from('attendance_logs').select('*').eq('id', id);
+      if (!oldData || oldData.length === 0) {
+        return res.status(404).json({ message: 'Attendance record not found.' });
+      }
+      const oldRecord = oldData[0];
+      
+      let activeHours = 0.00;
+      if (clockInTime && clockOutTime) {
+        const [inH, inM] = clockInTime.split(':').map(Number);
+        const [outH, outM] = clockOutTime.split(':').map(Number);
+        activeHours = parseFloat((((outH * 60 + outM) - (inH * 60 + inM)) / 60).toFixed(2));
+      }
+      
+      const { data: assignments } = await supabase
+        .from('employee_shift_assignments')
+        .select('shifts(*)')
+        .eq('employee_id', oldRecord.employee_id)
+        .or(`end_date.is.null,end_date.gte.${oldRecord.date}`)
+        .limit(1);
+        
+      let recordStatus = 'Present';
+      if (assignments && assignments.length > 0 && assignments[0].shifts) {
+        const shift = assignments[0].shifts;
+        const [shHour, shMin] = shift.start_time.split(':').map(Number);
+        const [inHour, inMin] = clockInTime.split(':').map(Number);
+        
+        const shiftStartMins = shHour * 60 + shMin;
+        const clockInMins = inHour * 60 + inMin;
+        
+        if (clockInMins > (shiftStartMins + shift.grace_period_minutes)) {
+          recordStatus = 'Late';
+        }
+      }
+      
+      if (activeHours < 4.0 && clockOutTime) {
+        recordStatus = 'Half Day';
+      }
+      
+      if (clockInLocationStatus === 'Location Not Verified') {
+        recordStatus = 'Location Not Verified';
+      }
+      
+      const inIp = oldRecord.clock_in_ip === 'admin added' ? 'admin added' : 'admin updated';
+      const outIp = clockOutTime ? (oldRecord.clock_out_ip === 'admin added' ? 'admin added' : 'admin updated') : null;
+
+      const { data: updated, error } = await supabase.from('attendance_logs').update({
+        clock_in_time: clockInTime,
+        clock_out_time: clockOutTime || null,
+        clock_in_ip: inIp,
+        clock_out_ip: outIp,
+        clock_in_location_status: clockInLocationStatus,
+        clock_out_location_status: clockOutLocationStatus || null,
+        total_hours: activeHours,
+        status: recordStatus
+      }).eq('id', id).select();
+
+      if (error) throw error;
+      
+      await logAudit(req, 'ADMIN_UPDATE_ATTENDANCE', `attendance_logs/${id}`, oldRecord, updated[0]);
+      res.json({ message: 'Attendance record modified successfully.', log: updated[0] });
+    } catch (err) {
+      console.error('adminUpdateAttendance Error:', err.message);
+      res.status(500).json({ message: 'Error modifying attendance record.' });
+    }
+  },
+
+  // Monthly detailed attendance summary (Admin Reports)
+  getMonthlyAttendanceSummary: async (req, res) => {
+    const { month, year, employeeId } = req.query;
+    if (!month || !year) {
+      return res.status(400).json({ message: 'Month and year are required.' });
+    }
+    
+    const m = parseInt(month, 10);
+    const y = parseInt(year, 10);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    
+    const startStr = `${y}-${String(m).padStart(2, '0')}-01`;
+    const endStr = `${y}-${String(m).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+    
+    try {
+      let empQuery = supabase.from('employees').select('id, employee_id, full_name, departments(name)').eq('status', 'Active').is('deleted_at', null);
+      if (employeeId) {
+        empQuery = empQuery.eq('id', employeeId);
+      }
+      const { data: employees, error: empErr } = await empQuery;
+      if (empErr) throw empErr;
+      
+      const { data: holidays, error: holErr } = await supabase.from('holidays').select('*').gte('date', startStr).lte('date', endStr);
+      if (holErr) throw holErr;
+      
+      const { data: logs, error: logErr } = await supabase.from('attendance_logs').select('*').gte('date', startStr).lte('date', endStr);
+      if (logErr) throw logErr;
+      
+      const { data: allLeaves } = await supabase.from('leave_requests').select('*, leave_types(code)').eq('status', 'Approved');
+      const { data: allBalances } = await supabase.from('leave_balances').select('*, leave_types(code)').eq('year', y);
+
+      const holidaysSet = {};
+      (holidays || []).forEach(h => {
+        let isPaid = true;
+        try {
+          const parsed = JSON.parse(h.description);
+          isPaid = parsed.is_paid !== false;
+        } catch (e) {}
+        if (isPaid) {
+          holidaysSet[h.date] = h.name;
+        }
+      });
+      
+      const summaryList = [];
+      
+      for (const emp of employees) {
+        let presentDays = 0;
+        let lateDays = 0;
+        let halfDays = 0;
+        let absentDays = 0;
+        let clTaken = 0;
+        let slTaken = 0;
+        let elTaken = 0;
+        let lopTaken = 0;
+        let holidayWorkDays = 0;
+        
+        let geofenceInCount = 0;
+        let geofenceOutCount = 0;
+        let outsideInCount = 0;
+        let outsideOutCount = 0;
+        let totalHours = 0;
+        
+        const empLogs = (logs || []).filter(l => l.employee_id === emp.id);
+        const empLogsMap = {};
+        empLogs.forEach(l => { empLogsMap[l.date] = l; });
+        
+        const empLeavesMap = {};
+        (allLeaves || [])
+          .filter(r => r.employee_id === emp.id)
+          .forEach(r => {
+            const start = new Date(r.from_date);
+            const end = new Date(r.to_date);
+            for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+              const dateStr = d.toISOString().split('T')[0];
+              empLeavesMap[dateStr] = r.leave_types?.code || 'LOP';
+            }
+          });
+          
+        const dailyDetailList = [];
+        let calendarWorkingDays = 0;
+
+        for (let day = 1; day <= daysInMonth; day++) {
+          const dateObj = new Date(y, m - 1, day);
+          const dateStr = dateObj.toISOString().split('T')[0];
+          const dayOfWeek = dateObj.getDay();
+          
+          const log = empLogsMap[dateStr];
+          const isWeekend = (dayOfWeek === 0);
+          const isHoliday = !!holidaysSet[dateStr] || isWeekend;
+          
+          let dayStatus = 'Absent';
+          
+          if (!isHoliday) {
+            calendarWorkingDays++;
+          }
+
+          if (log) {
+            totalHours += parseFloat(log.total_hours || 0);
+            if (log.clock_in_location_status === 'Verified-Inside') geofenceInCount++;
+            if (log.clock_in_location_status === 'Verified-Outside') outsideInCount++;
+            if (log.clock_out_location_status === 'Verified-Inside') geofenceOutCount++;
+            if (log.clock_out_location_status === 'Verified-Outside') outsideOutCount++;
+
+            if (isHoliday) {
+              holidayWorkDays++;
+              dayStatus = 'Holiday Work';
+            } else {
+              if (log.status === 'Leave') {
+                const leaveCode = empLeavesMap[dateStr] || 'LOP';
+                if (leaveCode === 'CL') clTaken++;
+                else if (leaveCode === 'SL') slTaken++;
+                else if (leaveCode === 'EL') elTaken++;
+                else lopTaken++;
+                dayStatus = `Leave (${leaveCode})`;
+              } else {
+                presentDays++;
+                if (log.status === 'Late') lateDays++;
+                if (log.status === 'Half Day') halfDays++;
+                dayStatus = log.status;
+              }
+            }
+          } else {
+            if (isHoliday) {
+              dayStatus = 'Paid rest day';
+            } else {
+              const leaveCode = empLeavesMap[dateStr];
+              if (leaveCode) {
+                if (leaveCode === 'CL') clTaken++;
+                else if (leaveCode === 'SL') slTaken++;
+                else if (leaveCode === 'EL') elTaken++;
+                else lopTaken++;
+                dayStatus = `Leave (${leaveCode})`;
+              } else {
+                absentDays++;
+                dayStatus = 'Absent';
+              }
+            }
+          }
+          
+          dailyDetailList.push({
+            date: dateStr,
+            dayName: dateObj.toLocaleDateString('en-US', { weekday: 'short' }),
+            isHoliday,
+            clockIn: log ? log.clock_in_time : null,
+            clockOut: log ? log.clock_out_time : null,
+            geofenceIn: log ? log.clock_in_location_status : null,
+            geofenceOut: log ? log.clock_out_location_status : null,
+            hours: log ? log.total_hours : 0,
+            status: dayStatus,
+            clock_in_ip: log ? log.clock_in_ip : null,
+            clock_out_ip: log ? log.clock_out_ip : null
+          });
+        }
+        
+        const empBalances = (allBalances || []).filter(b => b.employee_id === emp.id);
+        const clBal = empBalances.find(b => b.leave_types?.code === 'CL');
+        const slBal = empBalances.find(b => b.leave_types?.code === 'SL');
+        const elBal = empBalances.find(b => b.leave_types?.code === 'EL');
+        
+        summaryList.push({
+          employee_id_val: emp.id,
+          employee_id: emp.employee_id,
+          full_name: emp.full_name,
+          department_name: emp.departments ? emp.departments.name : 'Unassigned',
+          total_calendar_days: daysInMonth,
+          total_working_days: calendarWorkingDays,
+          days_present: presentDays,
+          days_late: lateDays,
+          days_half_day: halfDays,
+          days_absent: absentDays,
+          cl_taken: clTaken,
+          sl_taken: slTaken,
+          el_taken: elTaken,
+          lop_taken: lopTaken,
+          holiday_work_days: holidayWorkDays,
+          total_hours: parseFloat(totalHours.toFixed(2)),
+          total_geofence_in_out: geofenceInCount + geofenceOutCount,
+          total_outside_in_out: outsideInCount + outsideOutCount,
+          balances: {
+            CL: clBal ? (clBal.total_days - clBal.availed_days - clBal.pending_days) : 0,
+            SL: slBal ? (slBal.total_days - slBal.availed_days - slBal.pending_days) : 0,
+            EL: elBal ? (elBal.total_days - elBal.availed_days - elBal.pending_days) : 0
+          },
+          details: dailyDetailList
+        });
+      }
+      
+      res.json(summaryList);
+    } catch (err) {
+      console.error('getMonthlyAttendanceSummary Error:', err.message);
+      res.status(500).json({ message: 'Error calculating attendance summary.' });
     }
   }
 };
