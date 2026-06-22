@@ -34,6 +34,8 @@ export default function AttendanceHub() {
   // Modals for manual attendance entry
   const [showAddManual, setShowAddManual] = useState(false);
   const [showEditManual, setShowEditManual] = useState(false);
+  const [showMapModal, setShowMapModal] = useState(false);
+  const [selectedMapLog, setSelectedMapLog] = useState(null);
   
   const [manualForm, setManualForm] = useState({
     employeeId: '',
@@ -313,19 +315,53 @@ export default function AttendanceHub() {
                                 <div>{log.clock_in_time}</div>
                                 {renderIpBadge(log.clock_in_ip)}
                               </td>
-                              <td>
+                              <td 
+                                onClick={() => {
+                                  setSelectedMapLog(log);
+                                  setShowMapModal(true);
+                                }}
+                                style={{ cursor: 'pointer' }}
+                                title="Click to view Google Maps location"
+                              >
                                 <span className={`badge ${
                                   log.clock_in_location_status === 'Verified-Inside' 
                                     ? 'badge-active' 
                                     : 'badge-rejected'
-                                  }`}>
+                                  }`}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    transition: 'all 0.2s ease',
+                                    border: '1px solid transparent'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.borderColor = 'var(--chub-pink)';
+                                    e.currentTarget.style.transform = 'scale(1.05)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.borderColor = 'transparent';
+                                    e.currentTarget.style.transform = 'scale(1)';
+                                  }}
+                                >
+                                  <MapPin size={12} style={{ flexShrink: 0 }} />
                                   {log.clock_in_location_status}
                                 </span>
                               </td>
                               <td>
                                 {log.clock_out_time ? (
-                                  <div>
-                                    <div>{log.clock_out_time}</div>
+                                  <div 
+                                    onClick={() => {
+                                      setSelectedMapLog(log);
+                                      setShowMapModal(true);
+                                    }}
+                                    style={{ cursor: 'pointer', display: 'inline-flex', flexDirection: 'column', gap: '2px' }}
+                                    title="Click to view Google Maps location"
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <span>{log.clock_out_time}</span>
+                                      {log.clock_out_latitude && <MapPin size={12} style={{ color: 'var(--chub-pink)', flexShrink: 0 }} />}
+                                    </div>
                                     {renderIpBadge(log.clock_out_ip)}
                                   </div>
                                 ) : (
@@ -751,6 +787,112 @@ export default function AttendanceHub() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* GOOGLE MAPS PREVIEW MODAL */}
+      {showMapModal && selectedMapLog && (
+        <div className="modal-overlay" onClick={() => setShowMapModal(false)}>
+          <div className="modal-content" style={{ maxWidth: '800px', width: '90%' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '20px' }}>
+              <h3 style={{ margin: 0, textTransform: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <MapPin size={20} style={{ color: 'var(--chub-pink)' }} />
+                Shift Location Maps - {selectedMapLog.full_name}
+              </h3>
+              <button 
+                onClick={() => setShowMapModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: 'var(--text-muted)', lineHeight: '1' }}
+              >
+                &times;
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '16px', fontSize: '14px', color: 'var(--text-muted)' }}>
+              <strong>Date:</strong> {selectedMapLog.date} &nbsp;|&nbsp; <strong>Employee ID:</strong> {selectedMapLog.employee_id_str || selectedMapLog.employee_id}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '20px' }}>
+              {/* Clock-In Map */}
+              <div className="card" style={{ padding: '16px', backgroundColor: 'var(--bg-primary)' }}>
+                <h4 style={{ fontSize: '14px', color: 'var(--chub-purple)', marginBottom: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px' }}>
+                  Clock-In Geolocation
+                </h4>
+                <div style={{ fontSize: '13px', marginBottom: '12px', lineHeight: '1.4' }}>
+                  <div><strong>Time:</strong> {selectedMapLog.clock_in_time}</div>
+                  <div><strong>Status:</strong> {selectedMapLog.clock_in_location_status}</div>
+                  {selectedMapLog.clock_in_latitude ? (
+                    <>
+                      <div><strong>Coordinates:</strong> {selectedMapLog.clock_in_latitude}, {selectedMapLog.clock_in_longitude}</div>
+                      <div><strong>Accuracy:</strong> ±{Math.round(selectedMapLog.clock_in_accuracy)} meters</div>
+                    </>
+                  ) : (
+                    <div style={{ color: 'var(--color-warning)', marginTop: '4px' }}>GPS coordinates not recorded for this event.</div>
+                  )}
+                </div>
+                {selectedMapLog.clock_in_latitude && (
+                  <iframe
+                    title="Clock-In Location Map"
+                    width="100%"
+                    height="240"
+                    style={{ border: '1px solid var(--border-color)', borderRadius: '12px' }}
+                    loading="lazy"
+                    allowFullScreen
+                    src={`https://maps.google.com/maps?q=${selectedMapLog.clock_in_latitude},${selectedMapLog.clock_in_longitude}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
+                  />
+                )}
+              </div>
+
+              {/* Clock-Out Map */}
+              <div className="card" style={{ padding: '16px', backgroundColor: 'var(--bg-primary)' }}>
+                <h4 style={{ fontSize: '14px', color: 'var(--chub-pink)', marginBottom: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px' }}>
+                  Clock-Out Geolocation
+                </h4>
+                {selectedMapLog.clock_out_time ? (
+                  <>
+                    <div style={{ fontSize: '13px', marginBottom: '12px', lineHeight: '1.4' }}>
+                      <div><strong>Time:</strong> {selectedMapLog.clock_out_time}</div>
+                      <div><strong>Status:</strong> {selectedMapLog.clock_out_location_status}</div>
+                      {selectedMapLog.clock_out_latitude ? (
+                        <>
+                          <div><strong>Coordinates:</strong> {selectedMapLog.clock_out_latitude}, {selectedMapLog.clock_out_longitude}</div>
+                          <div><strong>Accuracy:</strong> ±{Math.round(selectedMapLog.clock_out_accuracy)} meters</div>
+                        </>
+                      ) : (
+                        <div style={{ color: 'var(--color-warning)', marginTop: '4px' }}>GPS coordinates not recorded for this event.</div>
+                      )}
+                    </div>
+                    {selectedMapLog.clock_out_latitude && (
+                      <iframe
+                        title="Clock-Out Location Map"
+                        width="100%"
+                        height="240"
+                        style={{ border: '1px solid var(--border-color)', borderRadius: '12px' }}
+                        loading="lazy"
+                        allowFullScreen
+                        src={`https://maps.google.com/maps?q=${selectedMapLog.clock_out_latitude},${selectedMapLog.clock_out_longitude}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
+                      />
+                    )}
+                  </>
+                ) : (
+                  <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', color: 'var(--text-muted)', minHeight: '260px' }}>
+                    <Clock size={36} className="pulse" style={{ color: 'var(--chub-pink)', marginBottom: '12px' }} />
+                    <span style={{ fontSize: '14px', fontWeight: 500 }}>Shift Active / In Progress</span>
+                    <span style={{ fontSize: '12px', opacity: 0.8 }}>Employee has not checked out yet.</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
+              <button 
+                onClick={() => setShowMapModal(false)}
+                className="btn btn-secondary"
+                style={{ padding: '8px 24px', borderRadius: '8px' }}
+              >
+                Close View
+              </button>
+            </div>
           </div>
         </div>
       )}

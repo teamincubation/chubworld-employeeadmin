@@ -6,7 +6,6 @@ import { Mail, CheckCircle, ShieldAlert } from 'lucide-react';
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
-  const [resetLink, setResetLink] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -16,7 +15,6 @@ export default function ForgotPassword() {
     
     setError('');
     setMessage('');
-    setResetLink('');
     setLoading(true);
 
     try {
@@ -32,9 +30,6 @@ export default function ForgotPassword() {
       }
 
       setMessage(data.message);
-      if (data.resetLink) {
-        setResetLink(data.resetLink);
-      }
     } catch (err) {
       console.error(err);
       setError(err.message || 'An error occurred. Please try again.');
@@ -185,14 +180,6 @@ export default function ForgotPassword() {
               <CheckCircle size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
               <div>
                 <p>{message}</p>
-                {resetLink && (
-                  <div style={{ marginTop: '12px', padding: '10px', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: '6px' }}>
-                    <p style={{ fontWeight: 'bold', color: '#FFFFFF', fontSize: '12px', marginBottom: '4px' }}>Developer Sandbox Reset Bypass:</p>
-                    <a href={resetLink} style={{ color: '#F15BC4', fontSize: '12px', wordBreak: 'break-all' }}>
-                      {resetLink}
-                    </a>
-                  </div>
-                )}
               </div>
             </div>
           )}

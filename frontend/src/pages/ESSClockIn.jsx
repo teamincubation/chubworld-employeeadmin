@@ -11,6 +11,29 @@ export default function ESSClockIn() {
   const [shift, setShift] = useState(null);
   const [holidayName, setHolidayName] = useState('');
   const [loading, setLoading] = useState(true);
+  const [warningNotification, setWarningNotification] = useState(false);
+
+  const triggerWebNotification = () => {
+    if (window.Notification) {
+      if (Notification.permission === 'granted') {
+        new Notification("Urgent Clockout Warning", {
+          body: "You have been clocked in for over 8 hours. Please clock out to confirm your working time.",
+          tag: "clockout-warning",
+          requireInteraction: true
+        });
+      } else if (Notification.permission === 'default') {
+        Notification.requestPermission().then(permission => {
+          if (permission === 'granted') {
+            new Notification("Urgent Clockout Warning", {
+              body: "You have been clocked in for over 8 hours. Please clock out to confirm your working time.",
+              tag: "clockout-warning",
+              requireInteraction: true
+            });
+          }
+        });
+      }
+    }
+  };
 
   // Live IST Clock
   const [timeStr, setTimeStr] = useState('');
@@ -24,6 +47,11 @@ export default function ESSClockIn() {
   useEffect(() => {
     fetchStatus();
     acquireGPS();
+    
+    // Request Notification permission on mount
+    if (window.Notification && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
     
     // Live Clock interval
     const updateTime = () => {
@@ -46,8 +74,12 @@ export default function ESSClockIn() {
       setStatus(data.status);
       setRecord(data.record);
       setShift(data.shift);
+      setWarningNotification(!!data.warningNotification);
       if (data.status === 'holiday') {
         setHolidayName(data.holidayName || 'Scheduled Holiday');
+      }
+      if (data.warningNotification) {
+        triggerWebNotification();
       }
     } catch (err) {
       console.error(err);
@@ -146,6 +178,27 @@ export default function ESSClockIn() {
         </h1>
         <p style={{ opacity: 0.9, fontSize: '16px', fontWeight: 500 }}>{dateStr}</p>
       </div>
+
+      {/* 8+ Hours Urgent Warning Alert Banner */}
+      {warningNotification && (
+        <div className="card m-b-20" style={{
+          background: 'linear-gradient(135deg, #7f1d1d 0%, #b91c1c 100%)',
+          color: '#FFFFFF',
+          border: '1px solid rgba(248, 113, 113, 0.4)',
+          borderRadius: '12px',
+          padding: '16px',
+          animation: 'pulse 2s infinite',
+          boxShadow: '0 8px 32px 0 rgba(239, 68, 68, 0.2)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px'
+        }}>
+          <ShieldAlert size={20} style={{ color: '#fca5a5', flexShrink: 0 }} />
+          <span style={{ fontSize: '13px', color: '#fca5a5', lineHeight: '1.4' }}>
+            <strong>Urgent Warning:</strong> You have been clocked in for over 8 hours. Please click **Clock Out** below if you have finished your work today.
+          </span>
+        </div>
+      )}
 
       {/* Main clock actions */}
       <div className="card m-b-20" style={{ textAlign: 'center', padding: '30px' }}>

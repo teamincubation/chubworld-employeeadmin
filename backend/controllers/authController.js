@@ -489,7 +489,7 @@ const authController = {
       }
 
       if (!entity) {
-        return res.json({ message: 'If the email exists in our records, a secure password reset link will be sent.' });
+        return res.status(404).json({ message: "The email address is not registered in our records." });
       }
 
       const isActive = foundType === 'user'
@@ -596,9 +596,7 @@ const authController = {
       }
 
       res.json({
-        message: 'If the email exists in our records, a secure password reset link will be sent.',
-        resetToken: rawToken,
-        resetLink: resetLink,
+        message: 'A secure password reset link has been dispatched to your email address.',
         mailSent,
         mailError
       });

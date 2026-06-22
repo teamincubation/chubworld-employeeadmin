@@ -177,7 +177,16 @@ const attendanceController = {
 
       const record = logs[0];
       if (!record.clock_out_time) {
-        return res.json({ status: 'clocked_in', record, shift });
+        const clockInTimeStr = record.clock_in_time.length === 5 ? `${record.clock_in_time}:00` : record.clock_in_time;
+        const inDate = new Date(`${record.date}T${clockInTimeStr}`);
+        const nowIst = getISTDate();
+        const diffHours = (nowIst - inDate) / 3600000;
+        return res.json({ 
+          status: 'clocked_in', 
+          record, 
+          shift,
+          warningNotification: diffHours >= 8.0
+        });
       }
 
       res.json({ status: 'clocked_out', record, shift });

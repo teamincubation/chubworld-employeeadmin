@@ -129,6 +129,11 @@ async function syncSuperAdminCredentials() {
 }
 syncSuperAdminCredentials();
 
+// Start background auto-clockout scheduler (runs every 5 minutes)
+const { checkAndProcessAutoClockouts } = require('./utils/autoClockoutScheduler');
+setInterval(checkAndProcessAutoClockouts, 5 * 60 * 1000);
+setTimeout(checkAndProcessAutoClockouts, 5000); // Trigger first check 5 seconds after start
+
 // 8. Start server listener
 app.listen(PORT, () => {
   console.log(`C-Hub HR Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);

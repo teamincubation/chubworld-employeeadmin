@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
-import { Clock, Calendar, ShieldCheck, UserCheck, Milestone, User, Download, Smartphone } from 'lucide-react';
+import { Clock, Calendar, ShieldCheck, UserCheck, Milestone, User, Download, Smartphone, ShieldAlert } from 'lucide-react';
 
 export default function ESSDashboard() {
   const { request } = useAuth();
@@ -16,8 +16,35 @@ export default function ESSDashboard() {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
 
+  const triggerWebNotification = () => {
+    if (window.Notification) {
+      if (Notification.permission === 'granted') {
+        new Notification("Urgent Clockout Warning", {
+          body: "You have been clocked in for over 8 hours. Please clock out to confirm your working time.",
+          tag: "clockout-warning",
+          requireInteraction: true
+        });
+      } else if (Notification.permission === 'default') {
+        Notification.requestPermission().then(permission => {
+          if (permission === 'granted') {
+            new Notification("Urgent Clockout Warning", {
+              body: "You have been clocked in for over 8 hours. Please clock out to confirm your working time.",
+              tag: "clockout-warning",
+              requireInteraction: true
+            });
+          }
+        });
+      }
+    }
+  };
+
   useEffect(() => {
     fetchDashboardData();
+
+    // Request Notification permission on mount
+    if (window.Notification && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
 
     // Check if user is on Android device
     const ua = navigator.userAgent || navigator.vendor || window.opera;
@@ -58,6 +85,10 @@ export default function ESSDashboard() {
       // Fetch today's clock status
       const attStatus = await request('/attendance/status');
       setAttendance(attStatus);
+
+      if (attStatus && attStatus.warningNotification) {
+        triggerWebNotification();
+      }
 
       // Fetch leave balances
       const leaveData = await request('/leaves/my-leaves');
@@ -214,6 +245,54 @@ export default function ESSDashboard() {
           >
             &times;
           </button>
+        </div>
+      )}
+
+      {/* 8+ Hours Urgent Warning Alert Banner */}
+      {attendance?.warningNotification && (
+        <div className="card m-b-20" style={{
+          background: 'linear-gradient(135deg, #7f1d1d 0%, #b91c1c 100%)',
+          color: '#FFFFFF',
+          border: '1px solid rgba(248, 113, 113, 0.4)',
+          borderRadius: '16px',
+          padding: '20px',
+          animation: 'pulse 2s infinite',
+          boxShadow: '0 8px 32px 0 rgba(239, 68, 68, 0.2)'
+        }}>
+          <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{
+              backgroundColor: 'rgba(255, 255, 255, 0.2)',
+              borderRadius: '50%',
+              padding: '10px',
+              color: '#fca5a5',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              <ShieldAlert size={28} />
+            </div>
+            <div style={{ flex: 1, minWidth: '240px' }}>
+              <h4 style={{ margin: '0 0 4px 0', color: '#FFFFFF', fontWeight: 'bold', fontSize: '16px', textTransform: 'none' }}>
+                Urgent Clock-out Warning
+              </h4>
+              <p style={{ margin: 0, fontSize: '13px', color: '#fca5a5', lineHeight: '1.4' }}>
+                You have been clocked in for over 8 hours. Please clock out immediately if you have finished your work to ensure your timesheet is recorded correctly.
+              </p>
+            </div>
+            <Link to="/ess/clock" className="btn" style={{
+              backgroundColor: '#FFFFFF',
+              color: '#b91c1c',
+              fontWeight: 'bold',
+              padding: '10px 20px',
+              borderRadius: '30px',
+              textDecoration: 'none',
+              fontSize: '13px',
+              flexShrink: 0
+            }}>
+              Clock Out Now
+            </Link>
+          </div>
         </div>
       )}
 

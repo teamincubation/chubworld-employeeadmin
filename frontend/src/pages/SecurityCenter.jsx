@@ -221,19 +221,40 @@ export default function SecurityCenter() {
       let updated = false;
       for (const ip of uniqueIps) {
         if (!newLocs[ip]) {
+          let locationResolved = false;
           try {
             const res = await fetch(`https://freeipapi.com/api/json/${ip}`);
             if (res.ok) {
               const data = await res.json();
               if (data.cityName && data.countryName) {
                 newLocs[ip] = `${data.cityName}, ${data.countryName}`;
+                locationResolved = true;
                 updated = true;
-              } else {
-                newLocs[ip] = 'Unknown Location';
               }
             }
           } catch (e) {
-            console.error('IP resolve error for ' + ip, e);
+            console.warn('Primary IP resolve failed for ' + ip + ', attempting fallback...', e);
+          }
+
+          if (!locationResolved) {
+            try {
+              const res = await fetch(`https://ipapi.co/${ip}/json/`);
+              if (res.ok) {
+                const data = await res.json();
+                if (data.city && data.country_name) {
+                  newLocs[ip] = `${data.city}, ${data.country_name}`;
+                  locationResolved = true;
+                  updated = true;
+                }
+              }
+            } catch (e2) {
+              console.error('Fallback IP resolve failed for ' + ip, e2);
+            }
+          }
+
+          if (!locationResolved) {
+            newLocs[ip] = 'Unknown Location';
+            updated = true;
           }
         }
       }
@@ -752,6 +773,7 @@ export default function SecurityCenter() {
                             <th>Timestamp (IST)</th>
                             <th>Action Type</th>
                             <th>Performed By</th>
+                            <th>IP Location</th>
                             <th>Target Node</th>
                             <th>Security Metadata</th>
                             {user?.role === 'Super Admin' && <th style={{ width: '80px', textAlign: 'center' }}>Actions</th>}
@@ -781,18 +803,22 @@ export default function SecurityCenter() {
                                 <div><strong>{log.performed_by}</strong></div>
                                 <span style={{ fontSize: '11px', color: 'var(--chub-pink)', textTransform: 'uppercase', fontWeight: 600 }}>{log.role}</span>
                               </td>
+                              <td>
+                                {log.ip_address === '127.0.0.1' || log.ip_address === '::1' || log.ip_address === '::ffff:127.0.0.1' ? (
+                                  <span className="badge badge-inactive">Localhost</span>
+                                ) : (
+                                  <span className="badge badge-active" style={{ fontSize: '11px', fontWeight: 600, color: 'var(--chub-purple)' }}>
+                                    {ipLocations[log.ip_address] || 'Resolving...'}
+                                  </span>
+                                )}
+                              </td>
                               <td style={{ fontFamily: 'monospace', fontSize: '12px' }}>{log.target_record || 'N/A'}</td>
                               <td>
                                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                                   <div>IP: {log.ip_address}</div>
-                                  {log.ip_address === '127.0.0.1' || log.ip_address === '::1' || log.ip_address === '::ffff:127.0.0.1' ? (
-                                    <div style={{ color: 'var(--chub-pink)', fontWeight: 600 }}>Localhost (Developer Session)</div>
-                                  ) : (
-                                    <div style={{ color: 'var(--chub-purple)', fontWeight: 600 }}>
-                                      {ipLocations[log.ip_address] || 'Resolving location...'}
-                                    </div>
-                                  )}
-                                  <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '250px' }}>UA: {log.user_agent}</div>
+                                  <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '250px' }} title={log.user_agent}>
+                                    UA: {log.user_agent}
+                                  </div>
                                 </div>
                               </td>
                               {user?.role === 'Super Admin' && (
@@ -1223,6 +1249,18 @@ export default function SecurityCenter() {
                       <option value="true">Enforced (Coordinates Verified)</option>
                       <option value="false">Disabled (Open Clockings)</option>
                     </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Auto Clock-out Duration Threshold (Hours)</label>
+                    <input 
+                      type="number"
+                      step="0.5"
+                      min="1"
+                      className="form-control"
+                      value={settings.auto_clockout_duration || '12'}
+                      onChange={(e) => setSettings({ ...settings, auto_clockout_duration: e.target.value })}
+                      placeholder="e.g. 12"
+                    />
                   </div>
                   {/* Default Base Leaves Allocation */}
                   <h4 style={{ color: 'var(--chub-purple)', fontSize: '14px', margin: '24px 0 12px 0' }}>Default Base Leaves Allocation (New Onboardings)</h4>
