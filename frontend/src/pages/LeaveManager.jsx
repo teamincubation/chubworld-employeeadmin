@@ -157,8 +157,8 @@ export default function LeaveManager() {
                               <span className="badge badge-kyc-pending">{req.leave_name} ({req.leave_code})</span>
                             </td>
                             <td>
-                              <div>From: <strong>{new Date(req.from_date).toLocaleDateString()}</strong></div>
-                              <div>To: <strong>{new Date(req.to_date).toLocaleDateString()}</strong></div>
+                              <div>From: <strong>{new Date(req.from_date).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' })}</strong></div>
+                              <div>To: <strong>{new Date(req.to_date).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' })}</strong></div>
                             </td>
                             <td style={{ fontWeight: 'bold', fontSize: '15px' }}>{req.total_days} Days</td>
                             <td>

@@ -234,7 +234,7 @@ export default function ESSLeaveRequest() {
                     <tr key={r.id}>
                       <td style={{ fontWeight: 600 }}>{r.leave_code}</td>
                       <td>
-                        <div style={{ fontSize: '12px' }}>{new Date(r.from_date).toLocaleDateString()} to {new Date(r.to_date).toLocaleDateString()}</div>
+                        <div style={{ fontSize: '12px' }}>{new Date(r.from_date).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' })} to {new Date(r.to_date).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' })}</div>
                       </td>
                       <td style={{ fontWeight: 'bold' }}>{r.total_days}</td>
                       <td>

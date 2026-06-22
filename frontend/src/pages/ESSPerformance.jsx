@@ -32,13 +32,16 @@ export default function ESSPerformance() {
   };
 
   const calculateSummary = (allLogs) => {
+    // CurrentDate is a state representing the current selected calendar month
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
 
-    // Filter logs for this month
+    // Filter logs for this month in IST
     const thisMonthLogs = allLogs.filter(log => {
       const d = new Date(log.date);
-      return d.getFullYear() === year && d.getMonth() === month;
+      const istYear = parseInt(d.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', year: 'numeric' }), 10);
+      const istMonth = parseInt(d.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', month: 'numeric' }), 10) - 1;
+      return istYear === year && istMonth === month;
     });
 
     let present = 0;
@@ -97,15 +100,14 @@ export default function ESSPerformance() {
     daysGrid.push(i);
   }
 
-  const monthName = currentDate.toLocaleString('en-US', { month: 'long' });
+  const monthName = currentDate.toLocaleString('en-US', { month: 'long', timeZone: 'Asia/Kolkata' });
 
   // Get log for specific day
   const getDayLog = (dayNum) => {
     if (!dayNum) return null;
     const formattedDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
     return logs.find(log => {
-      // Handle UTC vs Local string
-      const logD = new Date(log.date).toISOString().split('T')[0];
+      const logD = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(log.date));
       return logD === formattedDate;
     });
   };

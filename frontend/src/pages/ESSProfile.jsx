@@ -203,7 +203,7 @@ export default function ESSProfile() {
               <div><strong>Residential Address:</strong> <p style={{ color: 'var(--text-muted)' }}>{employee.current_address}</p></div>
               <div><strong>Office Geofence:</strong> <p style={{ color: 'var(--text-muted)' }}>{employee.work_location_name || 'N/A'}</p></div>
               <div><strong>Manager:</strong> <p style={{ color: 'var(--text-muted)' }}>{employee.manager_name || 'None'}</p></div>
-              <div><strong>Appointed Date:</strong> <p style={{ color: 'var(--text-muted)' }}>{employee.appointed_date ? new Date(employee.appointed_date).toLocaleDateString() : 'N/A'}</p></div>
+              <div><strong>Appointed Date:</strong> <p style={{ color: 'var(--text-muted)' }}>{employee.appointed_date ? new Date(employee.appointed_date).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' }) : 'N/A'}</p></div>
               <div><strong>Emergency Contact:</strong> <p style={{ color: 'var(--text-muted)' }}>{employee.emergency_contact_name} ({employee.emergency_contact_number})</p></div>
               <div><strong>Blood Group:</strong> <p style={{ color: 'var(--text-muted)' }}>{employee.blood_group || 'N/A'}</p></div>
             </div>

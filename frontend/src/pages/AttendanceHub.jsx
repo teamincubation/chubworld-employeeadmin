@@ -252,7 +252,7 @@ export default function AttendanceHub() {
                               <div style={{ fontWeight: 600 }}>{corr.full_name}</div>
                               <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{corr.employee_id}</span>
                             </td>
-                            <td><strong>{new Date(corr.date).toLocaleDateString()}</strong></td>
+                            <td><strong>{new Date(corr.date).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' })}</strong></td>
                             <td>
                               <span className="badge badge-kyc-pending" style={{ fontSize: '11px' }}>
                                 IN: {corr.requested_clock_in || 'N/A'} | OUT: {corr.requested_clock_out || 'N/A'}

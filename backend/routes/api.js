@@ -148,6 +148,7 @@ router.get('/leaves/types', authenticateToken, leaveController.getLeaveTypes);
    7. SECURITY & ENCRYPTION CENTER ROUTES
    ========================================================================= */
 router.get('/security/audit-logs', authenticateToken, requirePermission('audit:view'), securityController.getAuditLogs);
+router.delete('/security/audit-logs', authenticateToken, securityController.deleteAuditLogs);
 router.get('/security/login-history', authenticateToken, requirePermission('audit:view'), securityController.getLoginHistory);
 router.get('/security/alerts', authenticateToken, requirePermission('audit:view'), securityController.getSecurityEvents);
 router.get('/security/users', authenticateToken, requirePermission('role:manage'), securityController.listUsers);

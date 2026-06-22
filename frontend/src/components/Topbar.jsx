@@ -157,7 +157,7 @@ export default function Topbar() {
               fontSize: '14px', 
               fontWeight: 600, 
               color: 'var(--text-main)' 
-            }}>{user.email.split('@')[0]}</span>
+            }}>{user?.email?.split('@')[0] || ''}</span>
             <span style={{ 
               fontSize: '11px', 
               fontWeight: 700, 

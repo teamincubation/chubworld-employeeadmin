@@ -454,21 +454,24 @@ export default function LicensingCenter() {
                       const end = idx >= 0 ? licensingData.modules[idx].subscription_end_date : '';
                       const label = idx >= 0 ? licensingData.modules[idx].feature_label : '';
 
-                      const updateModuleField = (field, val) => {
-                        const newModules = [...(licensingData.modules || [])];
-                        if (idx >= 0) {
-                          newModules[idx] = { ...newModules[idx], [field]: val };
-                        } else {
-                          newModules.push({
-                            module_key: m.key,
-                            is_enabled: false,
-                            subscription_start_date: null,
-                            subscription_end_date: null,
-                            feature_label: null,
-                            [field]: val
-                          });
-                        }
-                        setLicensingData({ ...licensingData, modules: newModules });
+                      const updateModuleFields = (fieldsObj) => {
+                        setLicensingData(prev => {
+                          const newModules = [...(prev.modules || [])];
+                          const latestIdx = newModules.findIndex(item => item.module_key === m.key);
+                          if (latestIdx >= 0) {
+                            newModules[latestIdx] = { ...newModules[latestIdx], ...fieldsObj };
+                          } else {
+                            newModules.push({
+                              module_key: m.key,
+                              is_enabled: false,
+                              subscription_start_date: null,
+                              subscription_end_date: null,
+                              feature_label: null,
+                              ...fieldsObj
+                            });
+                          }
+                          return { ...prev, modules: newModules };
+                        });
                       };
 
                       const hasNoValidity = end === null || end === '';
@@ -481,10 +484,11 @@ export default function LicensingCenter() {
                                 type="checkbox" 
                                 checked={isEnabled} 
                                 onChange={(e) => {
-                                  updateModuleField('is_enabled', e.target.checked);
+                                  const updates = { is_enabled: e.target.checked };
                                   if (e.target.checked) {
-                                    updateModuleField('subscription_start_date', new Date().toISOString().split('T')[0]);
+                                    updates.subscription_start_date = new Date().toISOString().split('T')[0];
                                   }
+                                  updateModuleFields(updates);
                                 }} 
                               />
                               {m.name}
@@ -498,7 +502,7 @@ export default function LicensingCenter() {
                                   className="form-control" 
                                   disabled={!isEnabled || hasNoValidity}
                                   value={end ? end.split('T')[0] : ''} 
-                                  onChange={(e) => updateModuleField('subscription_end_date', e.target.value || null)} 
+                                  onChange={(e) => updateModuleFields({ subscription_end_date: e.target.value || null })} 
                                   style={{ height: '32px', padding: '4px 8px', fontSize: '12px' }}
                                 />
                               </div>
@@ -507,7 +511,7 @@ export default function LicensingCenter() {
                                   type="checkbox" 
                                   disabled={!isEnabled}
                                   checked={hasNoValidity}
-                                  onChange={(e) => updateModuleField('subscription_end_date', e.target.checked ? null : new Date().toISOString().split('T')[0])}
+                                  onChange={(e) => updateModuleFields({ subscription_end_date: e.target.checked ? null : new Date().toISOString().split('T')[0] })}
                                 />
                                 No Validity
                               </label>
@@ -518,7 +522,7 @@ export default function LicensingCenter() {
                               <select 
                                 className="form-control" 
                                 value={label || ''} 
-                                onChange={(e) => updateModuleField('feature_label', e.target.value || null)} 
+                                onChange={(e) => updateModuleFields({ feature_label: e.target.value || null })} 
                                 style={{ height: '32px', padding: '4px 8px', fontSize: '12px' }}
                               >
                                 <option value="">No Label</option>
@@ -594,21 +598,24 @@ export default function LicensingCenter() {
                             const end = idx >= 0 ? subAdminAccess[idx].subscription_end_date : '';
                             const label = idx >= 0 ? subAdminAccess[idx].feature_label : '';
 
-                            const updateSubModuleField = (field, val) => {
-                              const newAccess = [...subAdminAccess];
-                              if (idx >= 0) {
-                                newAccess[idx] = { ...newAccess[idx], [field]: val };
-                              } else {
-                                newAccess.push({
-                                  module_key: m.module_key,
-                                  is_enabled: false,
-                                  subscription_start_date: null,
-                                  subscription_end_date: null,
-                                  feature_label: null,
-                                  [field]: val
-                                });
-                              }
-                              setSubAdminAccess(newAccess);
+                            const updateSubModuleFields = (fieldsObj) => {
+                              setSubAdminAccess(prev => {
+                                const newAccess = [...prev];
+                                const latestIdx = newAccess.findIndex(sa => sa.module_key === m.module_key);
+                                if (latestIdx >= 0) {
+                                  newAccess[latestIdx] = { ...newAccess[latestIdx], ...fieldsObj };
+                                } else {
+                                  newAccess.push({
+                                    module_key: m.module_key,
+                                    is_enabled: false,
+                                    subscription_start_date: null,
+                                    subscription_end_date: null,
+                                    feature_label: null,
+                                    ...fieldsObj
+                                  });
+                                }
+                                return newAccess;
+                              });
                             };
 
                             const hasNoValidity = end === null || end === '';
@@ -621,10 +628,11 @@ export default function LicensingCenter() {
                                       type="checkbox" 
                                       checked={isEnabled} 
                                       onChange={(e) => {
-                                        updateSubModuleField('is_enabled', e.target.checked);
+                                        const updates = { is_enabled: e.target.checked };
                                         if (e.target.checked) {
-                                          updateSubModuleField('subscription_start_date', new Date().toISOString().split('T')[0]);
+                                          updates.subscription_start_date = new Date().toISOString().split('T')[0];
                                         }
+                                        updateSubModuleFields(updates);
                                       }} 
                                     />
                                     {m.module_key.toUpperCase()}
@@ -638,7 +646,7 @@ export default function LicensingCenter() {
                                         className="form-control" 
                                         disabled={!isEnabled || hasNoValidity}
                                         value={end ? end.split('T')[0] : ''} 
-                                        onChange={(e) => updateSubModuleField('subscription_end_date', e.target.value || null)} 
+                                        onChange={(e) => updateSubModuleFields({ subscription_end_date: e.target.value || null })} 
                                         style={{ height: '30px', padding: '2px 6px', fontSize: '11px' }}
                                       />
                                     </div>
@@ -647,7 +655,7 @@ export default function LicensingCenter() {
                                         type="checkbox" 
                                         disabled={!isEnabled}
                                         checked={hasNoValidity}
-                                        onChange={(e) => updateSubModuleField('subscription_end_date', e.target.checked ? null : new Date().toISOString().split('T')[0])}
+                                        onChange={(e) => updateSubModuleFields({ subscription_end_date: e.target.checked ? null : new Date().toISOString().split('T')[0] })}
                                       />
                                       No Validity
                                     </label>
@@ -658,7 +666,7 @@ export default function LicensingCenter() {
                                     <select 
                                       className="form-control" 
                                       value={label || ''} 
-                                      onChange={(e) => updateSubModuleField('feature_label', e.target.value || null)} 
+                                      onChange={(e) => updateSubModuleFields({ feature_label: e.target.value || null })} 
                                       style={{ height: '30px', padding: '2px 6px', fontSize: '11px' }}
                                     >
                                       <option value="">No Label</option>

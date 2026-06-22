@@ -179,7 +179,7 @@ export default function ReportsPage() {
             <div style={{ textAlign: 'right', fontSize: '13px' }}>
               <div><strong>Report:</strong> {reportType.toUpperCase()}</div>
               <div><strong>Range:</strong> {fromDate} to {toDate}</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Generated: {new Date().toLocaleDateString()} in IST</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Generated: {new Date().toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' })} in IST</div>
             </div>
           </div>
 

@@ -71,7 +71,7 @@ export default function AdminDashboard() {
         }[m.module_key] || m.module_key.toUpperCase();
 
         if (diffDays < 0) {
-          const formattedDate = new Date(m.subscription_end_date).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
+          const formattedDate = new Date(m.subscription_end_date).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
           alerts.push({
             moduleKey: m.module_key,
             type: 'expired',
@@ -344,7 +344,7 @@ export default function AdminDashboard() {
                     <div>
                       <div style={{ fontWeight: 'bold' }}>{alert.event_type} <span style={{ color: 'var(--color-error)' }}>({alert.severity})</span></div>
                       <div style={{ color: 'var(--text-muted)' }}>{alert.details}</div>
-                      <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>IP: {alert.ip_address} | {new Date(alert.created_at).toLocaleString()}</div>
+                      <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>IP: {alert.ip_address} | {new Date(alert.created_at).toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}</div>
                     </div>
                   </div>
                 ))}
@@ -369,7 +369,7 @@ export default function AdminDashboard() {
                   <div className="flex-between" style={{ marginBottom: '2px' }}>
                     <span style={{ fontWeight: 600, color: 'var(--chub-purple)' }}>{act.action_type}</span>
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                      {new Date(act.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(act.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}
                     </span>
                   </div>
                   <div style={{ color: 'var(--text-muted)' }}>

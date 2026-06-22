@@ -784,6 +784,29 @@ const securityController = {
       console.error('updateSubAdmin error:', err.message);
       res.status(500).json({ message: 'Error updating sub-admin details.' });
     }
+  },
+
+  deleteAuditLogs: async (req, res) => {
+    if (req.user.roleName !== 'Super Admin') {
+      return res.status(403).json({ message: 'Access denied: Only Super Admin can delete logs.' });
+    }
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: 'No log IDs specified for deletion.' });
+    }
+    try {
+      const { error } = await supabase
+        .from('audit_logs')
+        .delete()
+        .in('id', ids);
+
+      if (error) throw error;
+
+      res.json({ message: 'Audit logs deleted successfully.' });
+    } catch (err) {
+      console.error('deleteAuditLogs error:', err.message);
+      res.status(500).json({ message: 'Error deleting audit logs.' });
+    }
   }
 };
 

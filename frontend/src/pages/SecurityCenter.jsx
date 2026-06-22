@@ -11,6 +11,7 @@ export default function SecurityCenter() {
   
   // Data state
   const [audits, setAudits] = useState([]);
+  const [selectedLogIds, setSelectedLogIds] = useState([]);
   const [users, setUsers] = useState([]);
   const [locations, setLocations] = useState([]);
   const [settings, setSettings] = useState({});
@@ -347,6 +348,23 @@ export default function SecurityCenter() {
     fetchData();
   };
 
+  const handleDeleteLogs = async (logIds) => {
+    if (!logIds || logIds.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${logIds.length} audit log(s)?`)) return;
+
+    try {
+      await request('/security/audit-logs', {
+        method: 'DELETE',
+        body: { ids: logIds }
+      });
+      alert('Audit log(s) deleted successfully.');
+      setSelectedLogIds(prev => prev.filter(id => !logIds.includes(id)));
+      fetchData();
+    } catch (err) {
+      alert(err.message || 'Failed to delete audit logs.');
+    }
+  };
+
   const handleToggleUserStatus = async (id, currentStatus) => {
     const nextStatus = currentStatus === 'active' ? 'inactive' : 'active';
     if (!window.confirm(`Are you sure you want to change user status to ${nextStatus.toUpperCase()}?`)) return;
@@ -527,45 +545,102 @@ export default function SecurityCenter() {
                 {audits.length === 0 ? (
                   <p style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>No audit events found matching parameters.</p>
                 ) : (
-                  <div className="table-container">
-                    <table className="custom-table">
-                      <thead>
-                        <tr>
-                          <th>Timestamp (IST)</th>
-                          <th>Action Type</th>
-                          <th>Performed By</th>
-                          <th>Target Node</th>
-                          <th>Security Metadata</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {audits.map((log) => (
-                          <tr key={log.id}>
-                            <td style={{ fontSize: '12px' }}>{new Date(log.created_at).toLocaleString()}</td>
-                            <td style={{ fontWeight: 'bold', color: 'var(--chub-purple)' }}>{log.action_type}</td>
-                            <td>
-                              <div><strong>{log.performed_by}</strong></div>
-                              <span style={{ fontSize: '11px', color: 'var(--chub-pink)', textTransform: 'uppercase', fontWeight: 600 }}>{log.role}</span>
-                            </td>
-                            <td style={{ fontFamily: 'monospace', fontSize: '12px' }}>{log.target_record || 'N/A'}</td>
-                            <td>
-                              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                                <div>IP: {log.ip_address}</div>
-                                {log.ip_address === '127.0.0.1' || log.ip_address === '::1' || log.ip_address === '::ffff:127.0.0.1' ? (
-                                  <div style={{ color: 'var(--chub-pink)', fontWeight: 600 }}>Localhost (Developer Session)</div>
-                                ) : (
-                                  <div style={{ color: 'var(--chub-purple)', fontWeight: 600 }}>
-                                    {ipLocations[log.ip_address] || 'Resolving location...'}
-                                  </div>
-                                )}
-                                <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '250px' }}>UA: {log.user_agent}</div>
-                              </div>
-                            </td>
+                  <>
+                    {user?.role === 'Super Admin' && selectedLogIds.length > 0 && (
+                      <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'flex-start' }}>
+                        <button 
+                          onClick={() => handleDeleteLogs(selectedLogIds)}
+                          className="btn btn-danger"
+                          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', fontSize: '13px' }}
+                        >
+                          <Trash2 size={14} /> Delete Selected ({selectedLogIds.length})
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="table-container">
+                      <table className="custom-table">
+                        <thead>
+                          <tr>
+                            {user?.role === 'Super Admin' && (
+                              <th style={{ width: '40px', textAlign: 'center' }}>
+                                <input 
+                                  type="checkbox" 
+                                  checked={audits.length > 0 && selectedLogIds.length === audits.length}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedLogIds(audits.map(log => log.id));
+                                    } else {
+                                      setSelectedLogIds([]);
+                                    }
+                                  }}
+                                />
+                              </th>
+                            )}
+                            <th>Timestamp (IST)</th>
+                            <th>Action Type</th>
+                            <th>Performed By</th>
+                            <th>Target Node</th>
+                            <th>Security Metadata</th>
+                            {user?.role === 'Super Admin' && <th style={{ width: '80px', textAlign: 'center' }}>Actions</th>}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {audits.map((log) => (
+                            <tr key={log.id}>
+                              {user?.role === 'Super Admin' && (
+                                <td style={{ textAlign: 'center' }}>
+                                  <input 
+                                    type="checkbox" 
+                                    checked={selectedLogIds.includes(log.id)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedLogIds(prev => [...prev, log.id]);
+                                      } else {
+                                        setSelectedLogIds(prev => prev.filter(id => id !== log.id));
+                                      }
+                                    }}
+                                  />
+                                </td>
+                              )}
+                              <td style={{ fontSize: '12px' }}>{new Date(log.created_at).toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}</td>
+                              <td style={{ fontWeight: 'bold', color: 'var(--chub-purple)' }}>{log.action_type}</td>
+                              <td>
+                                <div><strong>{log.performed_by}</strong></div>
+                                <span style={{ fontSize: '11px', color: 'var(--chub-pink)', textTransform: 'uppercase', fontWeight: 600 }}>{log.role}</span>
+                              </td>
+                              <td style={{ fontFamily: 'monospace', fontSize: '12px' }}>{log.target_record || 'N/A'}</td>
+                              <td>
+                                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                  <div>IP: {log.ip_address}</div>
+                                  {log.ip_address === '127.0.0.1' || log.ip_address === '::1' || log.ip_address === '::ffff:127.0.0.1' ? (
+                                    <div style={{ color: 'var(--chub-pink)', fontWeight: 600 }}>Localhost (Developer Session)</div>
+                                  ) : (
+                                    <div style={{ color: 'var(--chub-purple)', fontWeight: 600 }}>
+                                      {ipLocations[log.ip_address] || 'Resolving location...'}
+                                    </div>
+                                  )}
+                                  <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '250px' }}>UA: {log.user_agent}</div>
+                                </div>
+                              </td>
+                              {user?.role === 'Super Admin' && (
+                                <td style={{ textAlign: 'center' }}>
+                                  <button 
+                                    onClick={() => handleDeleteLogs([log.id])} 
+                                    className="btn btn-secondary" 
+                                    style={{ padding: '4px 8px', borderColor: 'var(--color-error)', color: 'var(--color-error)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                                    title="Delete log"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </td>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
                 )}
               </div>
             )}

@@ -183,7 +183,7 @@ const employeeController = {
               
               <!-- Body -->
               <div style="padding: 40px 30px;">
-                <p style="font-size: 16px; line-height: 1.6; margin-top: 0;">Hello <strong>\${name}</strong>,</p>
+                <p style="font-size: 16px; line-height: 1.6; margin-top: 0;">Hello <strong>${name}</strong>,</p>
                 <p style="font-size: 15px; line-height: 1.6; color: #555555;">
                   Your employee profile has been set up successfully by the administrator. You can now access your C-Hub Employee Self-Service (ESS) Portal to clock in, request leaves, view reports, and more.
                 </p>
@@ -197,11 +197,11 @@ const employeeController = {
                     </tr>
                     <tr>
                       <td style="padding: 6px 0; color: #777777;"><strong>Email ID:</strong></td>
-                      <td style="padding: 6px 0; color: #333333; font-family: monospace; font-size: 15px;"><strong>\${email}</strong></td>
+                      <td style="padding: 6px 0; color: #333333; font-family: monospace; font-size: 15px;"><strong>${email}</strong></td>
                     </tr>
                     <tr>
                       <td style="padding: 6px 0; color: #777777;"><strong>Password:</strong></td>
-                      <td style="padding: 6px 0; color: #333333; font-family: monospace; font-size: 15px;"><strong>\${password}</strong></td>
+                      <td style="padding: 6px 0; color: #333333; font-family: monospace; font-size: 15px;"><strong>${password}</strong></td>
                     </tr>
                   </table>
                 </div>

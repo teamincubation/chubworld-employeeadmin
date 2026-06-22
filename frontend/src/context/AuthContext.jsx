@@ -37,14 +37,19 @@ export function AuthProvider({ children }) {
       const res = await fetch(`${API_BASE_URL}/auth/me`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      if (res.status === 401 || res.status === 403) {
-        logout();
-      } else {
+      if (res.ok) {
         const data = await res.json();
-        setUser({ ...data.user, employee: data.employee });
+        if (data && data.user) {
+          setUser({ ...data.user, employee: data.employee });
+        } else {
+          logout();
+        }
+      } else {
+        logout();
       }
     } catch (err) {
       console.error('Profile fetch failed:', err);
+      logout();
     } finally {
       setLoading(false);
     }

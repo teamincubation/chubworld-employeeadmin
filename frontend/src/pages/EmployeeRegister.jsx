@@ -1096,7 +1096,7 @@ export default function EmployeeRegister() {
                 </h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '14px' }}>
                   <div className="flex-between"><strong>Gender:</strong> <span>{profileData.employee.gender || 'Not specified'}</span></div>
-                  <div className="flex-between"><strong>DOB:</strong> <span>{profileData.employee.dob ? new Date(profileData.employee.dob).toLocaleDateString() : 'Not specified'}</span></div>
+                  <div className="flex-between"><strong>DOB:</strong> <span>{profileData.employee.dob ? new Date(profileData.employee.dob).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' }) : 'Not specified'}</span></div>
                   <div className="flex-between"><strong>Blood Group:</strong> <span>{profileData.employee.blood_group || 'Not specified'}</span></div>
                   <div className="flex-between"><strong>Marital Status:</strong> <span>{profileData.employee.marital_status || 'Not specified'}</span></div>
                   <div className="flex-between"><strong>Nationality:</strong> <span>{profileData.employee.nationality}</span></div>
@@ -1128,7 +1128,7 @@ export default function EmployeeRegister() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '14px' }}>
                   <div className="flex-between"><strong>Geofence Site:</strong> <span>{profileData.employee.work_location_name || 'Not configured'}</span></div>
                   <div className="flex-between"><strong>Reporting Manager:</strong> <span>{profileData.employee.manager_name || 'Self/None'}</span></div>
-                  <div className="flex-between"><strong>Appointed Date:</strong> <span>{profileData.employee.appointed_date ? new Date(profileData.employee.appointed_date).toLocaleDateString() : 'Not specified'}</span></div>
+                  <div className="flex-between"><strong>Appointed Date:</strong> <span>{profileData.employee.appointed_date ? new Date(profileData.employee.appointed_date).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' }) : 'Not specified'}</span></div>
                   <div className="flex-between"><strong>Monthly joining Salary:</strong> <span>₹ {profileData.employee.joining_salary} INR</span></div>
                   <div className="flex-between"><strong>Probation Days:</strong> <span>{profileData.employee.probation_period_days} Days</span></div>
                   <div className="flex-between"><strong>Interview HRs:</strong> <span>{profileData.employee.interviewed_hrs || 'Not logged'}</span></div>
