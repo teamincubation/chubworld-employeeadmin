@@ -16,13 +16,18 @@ async function recordLoginHistory(userId, email, ip, userAgent, status, remarks)
     return;
   }
   try {
+    const now = new Date();
+    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+    const istTime = new Date(utc + (3600000 * 5.5));
+
     const { error } = await supabase.from('login_history').insert([{
       user_id: userId,
       email_attempted: email,
       ip_address: ip,
       user_agent: userAgent,
       status: status,
-      remarks: remarks
+      remarks: remarks,
+      created_at: istTime.toISOString()
     }]);
     if (error) throw error;
   } catch (err) {

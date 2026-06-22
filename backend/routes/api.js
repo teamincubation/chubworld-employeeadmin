@@ -5,7 +5,7 @@ const path = require('path');
 const fs = require('fs');
 
 // Middlewares
-const { authenticateToken, requirePermission } = require('../middleware/authMiddleware');
+const { authenticateToken, requirePermission, requireRole } = require('../middleware/authMiddleware');
 const supabase = require('../config/db');
 
 // Controllers
@@ -90,7 +90,7 @@ router.post('/employees/:id/restore', authenticateToken, requirePermission('empl
 router.get('/employees/:id/kyc', authenticateToken, requirePermission('kyc:view'), employeeController.getEmployeeKycDecrypted);
 
 // Documents upload / delete
-router.post('/employees/:id/documents', authenticateToken, requirePermission('employee:edit'), handleUpload('document'), employeeController.uploadDocument);
+router.post('/employees/:id/documents', authenticateToken, requirePermission('employee:edit'), employeeController.uploadDocument);
 router.delete('/employees/documents/:docId', authenticateToken, requirePermission('employee:edit'), employeeController.deleteDocument);
 
 /* =========================================================================
@@ -136,7 +136,7 @@ router.post('/attendance/corrections/:correctionId/approve', authenticateToken, 
    6. LEAVE MANAGEMENT MODULE ROUTES
    ========================================================================= */
 router.get('/leaves/my-leaves', authenticateToken, leaveController.getEmployeeLeaves);
-router.post('/leaves/request', authenticateToken, handleUpload('medical_proof'), leaveController.submitLeaveRequest);
+router.post('/leaves/request', authenticateToken, leaveController.submitLeaveRequest);
 router.post('/leaves/cancel/:id', authenticateToken, leaveController.cancelPendingRequest);
 
 router.get('/leaves/admin-requests', authenticateToken, requirePermission('leave:approve'), leaveController.listAdminRequests);
@@ -170,6 +170,10 @@ router.get('/security/sub-admin-licensing/:userId', authenticateToken, securityC
 router.put('/security/sub-admin-licensing/:userId', authenticateToken, securityController.updateSubAdminLicensing);
 router.post('/security/sub-admins', authenticateToken, requirePermission('role:manage'), securityController.createSubAdmin);
 router.put('/security/sub-admins/:userId', authenticateToken, requirePermission('role:manage'), securityController.updateSubAdmin);
+
+// Database wiping actions
+router.post('/security/clear-database', authenticateToken, requireRole(['Super Admin']), securityController.clearDatabase);
+router.post('/security/clear-employees', authenticateToken, requireRole(['Super Admin']), securityController.clearEmployees);
 
 /* =========================================================================
    8. SECURE DOCUMENT RETRIEVAL (Permission validation before serving files)
@@ -250,8 +254,7 @@ router.get('/documents/download/:filename', authenticateToken, async (req, res) 
   }
 });
 
-// Self-photo update endpoint
-router.post('/employees/me/photo', authenticateToken, handleUpload('document'), employeeController.uploadSelfPhoto);
+// Self-photo update endpoint removed
 
 // Admin Controller management routes
 router.get('/security/admin-controller', authenticateToken, securityController.getAdminController);

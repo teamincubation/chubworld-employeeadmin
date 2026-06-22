@@ -17,7 +17,6 @@ export default function ESSLeaveRequest() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [reason, setReason] = useState('');
-  const [medicalProof, setMedicalProof] = useState(null);
 
   // Calculated count
   const [totalDays, setTotalDays] = useState(0);
@@ -60,36 +59,19 @@ export default function ESSLeaveRequest() {
       return setError('Please fill in all required fields.');
     }
 
-    // Find if selected type is SL
-    const activeType = balances.find(b => b.leave_type_id === Number(leaveTypeId));
-    if (activeType?.leave_code === 'SL' && totalDays >= 3 && !medicalProof) {
-      return setError('Medical certificate attachment is mandatory for sick leaves of 3 days or more.');
-    }
-
     setError('');
     setSubmitting(true);
 
     try {
-      const form = new FormData();
-      form.append('leaveTypeId', leaveTypeId);
-      form.append('fromDate', fromDate);
-      form.append('toDate', toDate);
-      form.append('reason', reason);
-      if (medicalProof) {
-        form.append('medical_proof', medicalProof);
-      }
-
-      // Call API using fetch directly since it's FormData
-      const res = await fetch(`${API_BASE_URL}/leaves/request`, {
+      const data = await request('/leaves/request', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-        body: form
+        body: {
+          leaveTypeId,
+          fromDate,
+          toDate,
+          reason
+        }
       });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || 'Error submitting leave request.');
-      }
 
       alert('Leave request submitted successfully.');
       // Reset form
@@ -97,7 +79,6 @@ export default function ESSLeaveRequest() {
       setFromDate('');
       setToDate('');
       setReason('');
-      setMedicalProof(null);
       fetchLeaves();
     } catch (err) {
       setError(err.message || 'Error submitting request.');
@@ -192,15 +173,9 @@ export default function ESSLeaveRequest() {
               </div>
             )}
 
-            <div className="form-group">
+            <div className="form-group" style={{ marginBottom: '24px' }}>
               <label className="form-label">Reason / Remarks *</label>
               <textarea className="form-control" rows="3" placeholder="Provide leave request details..." value={reason} onChange={(e) => setReason(e.target.value)} required />
-            </div>
-
-            {/* Optional/Mandatory medical upload */}
-            <div className="form-group" style={{ marginBottom: '24px' }}>
-              <label className="form-label">Medical Certificate (PDF/JPG if Sick Leave (3+ Days))</label>
-              <input type="file" className="form-control" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => setMedicalProof(e.target.files[0])} />
             </div>
 
             <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={submitting}>

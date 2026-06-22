@@ -148,10 +148,8 @@ const leaveController = {
   submitLeaveRequest: async (req, res) => {
     const employeeId = req.user.employeeId;
     const { leaveTypeId, fromDate, toDate, reason } = req.body;
-    const attachmentPath = req.file ? req.file.path.replace(/\\/g, '/') : null;
 
     if (!leaveTypeId || !fromDate || !toDate || !reason) {
-      if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
       return res.status(400).json({ message: 'Leave type, dates, and reason are required.' });
     }
 
@@ -159,7 +157,6 @@ const leaveController = {
       const fDate = new Date(fromDate);
       const tDate = new Date(toDate);
       if (tDate < fDate) {
-        if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
         return res.status(400).json({ message: 'End date cannot be prior to start date.' });
       }
 
@@ -168,35 +165,26 @@ const leaveController = {
 
       const { data: leaveTypes } = await supabase.from('leave_types').select('*').eq('id', leaveTypeId).eq('active', true);
       if (!leaveTypes || leaveTypes.length === 0) {
-        if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
         return res.status(404).json({ message: 'Selected leave type is inactive or invalid.' });
       }
       const leaveType = leaveTypes[0];
-
-      if (leaveType.code === 'SL' && totalDays >= leaveType.requires_medical_certificate_days && !attachmentPath) {
-        return res.status(400).json({ 
-          message: `Medical certificate upload is mandatory for sick leaves extending ${leaveType.requires_medical_certificate_days} days or more.` 
-        });
-      }
 
       const year = fDate.getFullYear();
       const { data: balances } = await supabase.from('leave_balances').select('*').eq('employee_id', employeeId).eq('leave_type_id', leaveTypeId).eq('year', year);
       
       if (!balances || balances.length === 0) {
-        if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
         return res.status(400).json({ message: 'No leave balance allocated for this leave type this year.' });
       }
 
       const balance = balances[0];
       const available = balance.total_days - balance.availed_days - balance.pending_days;
       if (totalDays > available) {
-        if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
         return res.status(400).json({ message: `Insufficient leave balance. Requested: ${totalDays} days. Available: ${available} days.` });
       }
 
       await supabase.from('leave_requests').insert([{
         employee_id: employeeId, leave_type_id: leaveTypeId, from_date: fromDate, to_date: toDate, 
-        total_days: totalDays, reason, attachment_path: attachmentPath, status: 'Pending'
+        total_days: totalDays, reason, attachment_path: null, status: 'Pending'
       }]);
 
       await supabase.from('leave_balances').update({

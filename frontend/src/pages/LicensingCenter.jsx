@@ -10,8 +10,7 @@ export default function LicensingCenter() {
   
   // Tab control
   const [activeSubTab, setActiveSubTab] = useState('controller'); // 'controller', 'subadmins'
-  
-  // Licensing Data state
+    // Licensing Data state
   const [licensingData, setLicensingData] = useState({ modules: [], admin_creation_limit: 3 });
   const [subAdminsList, setSubAdminsList] = useState([]);
   const [selectedSubAdminId, setSelectedSubAdminId] = useState('');
@@ -20,6 +19,10 @@ export default function LicensingCenter() {
   const [error, setError] = useState('');
   const [licensingSaving, setLicensingSaving] = useState(false);
 
+  // Wiping confirmation modal states
+  const [showWipeModal, setShowWipeModal] = useState(false); // false, 'database', 'employees'
+  const [confirmInput, setConfirmInput] = useState('');
+  const [wipeLoading, setWipeLoading] = useState(false);
   // Admin Controller specific states
   const [employeesList, setEmployeesList] = useState([]);
   const [adminController, setAdminController] = useState(null);
@@ -137,6 +140,34 @@ export default function LicensingCenter() {
     }
   };
 
+  const handlePerformWipe = async (e) => {
+    if (e) e.preventDefault();
+    if (showWipeModal === 'database' && confirmInput !== 'CLEAR DATABASE') {
+      alert('Confirmation text mismatch. Action aborted.');
+      return;
+    }
+    if (showWipeModal === 'employees' && confirmInput !== 'CLEAR EMPLOYEES') {
+      alert('Confirmation text mismatch. Action aborted.');
+      return;
+    }
+
+    setWipeLoading(true);
+    try {
+      const endpoint = showWipeModal === 'database' ? '/security/clear-database' : '/security/clear-employees';
+      const res = await request(endpoint, {
+        method: 'POST'
+      });
+      alert(res.message || 'Data cleared successfully.');
+      setShowWipeModal(false);
+      setConfirmInput('');
+      fetchData();
+    } catch (err) {
+      alert(err.message || 'Wiping operation failed.');
+    } finally {
+      setWipeLoading(false);
+    }
+  };
+
   const handleAssignAdminController = async (e) => {
     e.preventDefault();
     if (!adminCtrlName || !adminCtrlEmail || !inputPassword) {
@@ -212,7 +243,6 @@ export default function LicensingCenter() {
           <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Configure subscription bounds, feature tiers, and system access policies for administrative accounts.</p>
         </div>
       </div>
-
       {/* Sub-tabs */}
       <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
         <button 
@@ -229,8 +259,14 @@ export default function LicensingCenter() {
         >
           <Users size={16} /> Sub-Admin Module Access
         </button>
+        <button 
+          onClick={() => setActiveSubTab('wiping')}
+          className={`btn ${activeSubTab === 'wiping' ? 'btn-primary' : 'btn-secondary'}`}
+          style={{ borderRadius: '8px', padding: '10px 20px' }}
+        >
+          <Trash2 size={16} /> Database Maintenance
+        </button>
       </div>
-
       {error && <div className="alert alert-error"><ShieldAlert /><span>{error}</span></div>}
 
       <div className="card">
@@ -694,9 +730,123 @@ export default function LicensingCenter() {
                 </div>
               </div>
             )}
+
+            {/* 3. DATABASE MAINTENANCE TAB */}
+            {activeSubTab === 'wiping' && (
+              <div>
+                <h3 style={{ fontSize: '18px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '20px', color: 'var(--chub-purple)' }}>
+                  Dangerous Database Maintenance purging tools
+                </h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '24px' }}>
+                  Perform irreversible hard purges on transaction data, employee lists, KYC registers, configurations, and user logs.
+                </p>
+
+                <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+                  
+                  {/* Card 1: Clear Database */}
+                  <div className="card" style={{ flex: 1, minWidth: '300px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', backgroundColor: 'var(--bg-primary)' }}>
+                    <div>
+                      <h4 style={{ color: 'var(--color-error)', fontSize: '16px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                        <ShieldAlert size={20} /> Purge Entire Database
+                      </h4>
+                      <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.5', marginBottom: '20px' }}>
+                        Deletes all transactional data including attendance logs, correction requests, leaves, documents numbers, KYC records, departments, designations, geofence locations, and administrative credentials.
+                        <strong>Excludes the Super Admin user account (chub.admin@adloaf.com) and System Parameters configurations.</strong>
+                      </p>
+                    </div>
+                    <button 
+                      type="button" 
+                      onClick={() => { setShowWipeModal('database'); setConfirmInput(''); }}
+                      className="btn btn-danger"
+                      style={{ width: '100%', padding: '10px' }}
+                    >
+                      Clear Database
+                    </button>
+                  </div>
+
+                  {/* Card 2: Clear Employees */}
+                  <div className="card" style={{ flex: 1, minWidth: '300px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', backgroundColor: 'var(--bg-primary)' }}>
+                    <div>
+                      <h4 style={{ color: 'var(--color-error)', fontSize: '16px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                        <Users size={20} /> Clear All Employees
+                      </h4>
+                      <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.5', marginBottom: '20px' }}>
+                        Deletes all employee profiles, their KYC details, document reference numbers, shift assignments, leave balances, leave requests, and attendance logs. 
+                        <strong>Keeps organizational structures (departments, designations, geofences) and user logins intact (except deleted employees' login credentials).</strong>
+                      </p>
+                    </div>
+                    <button 
+                      type="button" 
+                      onClick={() => { setShowWipeModal('employees'); setConfirmInput(''); }}
+                      className="btn btn-danger"
+                      style={{ width: '100%', padding: '10px' }}
+                    >
+                      Clear All Employees
+                    </button>
+                  </div>
+
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
+
+      {/* WIPING CONFIRMATION MODAL */}
+      {showWipeModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '480px', textAlign: 'center' }}>
+            <ShieldAlert size={48} style={{ color: 'var(--color-error)', margin: '0 auto 16px auto', display: 'block' }} />
+            <h3 style={{ marginBottom: '12px', color: 'var(--color-error)' }}>
+              {showWipeModal === 'database' ? 'Confirm Database Purge' : 'Confirm Employee Clearing'}
+            </h3>
+            <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '20px', lineHeight: '1.5' }}>
+              {showWipeModal === 'database' 
+                ? 'Warning: This will purge all transaction data, structural configurations, audit trails, and administrative login credentials. Only the Super Admin and system parameters will remain.' 
+                : 'Warning: This will delete all employee profiles, KYC data, leave details, attendance sheets, and employee logins. Geofences and department structures will remain.'}
+            </p>
+            
+            <div className="form-group" style={{ marginBottom: '24px' }}>
+              <label className="form-label" style={{ fontWeight: 'bold' }}>
+                To proceed, type <span style={{ color: 'var(--color-error)' }}>
+                  {showWipeModal === 'database' ? 'CLEAR DATABASE' : 'CLEAR EMPLOYEES'}
+                </span> below:
+              </label>
+              <input 
+                type="text" 
+                className="form-control" 
+                placeholder="Type the confirmation string..." 
+                value={confirmInput} 
+                onChange={(e) => setConfirmInput(e.target.value)} 
+                style={{ textAlign: 'center', fontWeight: 'bold', letterSpacing: '0.5px' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button 
+                type="button" 
+                onClick={() => { setShowWipeModal(false); setConfirmInput(''); }} 
+                className="btn btn-secondary"
+                disabled={wipeLoading}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                onClick={handlePerformWipe} 
+                className="btn btn-danger"
+                disabled={
+                  wipeLoading || 
+                  (showWipeModal === 'database' && confirmInput !== 'CLEAR DATABASE') ||
+                  (showWipeModal === 'employees' && confirmInput !== 'CLEAR EMPLOYEES')
+                }
+              >
+                {wipeLoading ? 'Purging...' : 'Yes, Purge Data'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

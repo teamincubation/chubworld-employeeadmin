@@ -8,7 +8,6 @@ export default function ESSProfile() {
   // Profile state
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
 
   // Password reset state
@@ -37,41 +36,6 @@ export default function ESSProfile() {
       console.error(err);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handlePhotoChange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Photo file size exceeds the 5MB limit.');
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append('document', file);
-
-    setUploadingPhoto(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/employees/me/photo`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-        body: formData
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || 'Failed to upload photo.');
-      }
-      alert('Profile photo updated successfully.');
-      
-      // Refresh AuthContext globally and local ESS state
-      await refreshGlobalProfile();
-      await fetchProfile();
-    } catch (err) {
-      alert(err.message || 'Error uploading profile photo.');
-    } finally {
-      setUploadingPhoto(false);
     }
   };
 
@@ -137,48 +101,6 @@ export default function ESSProfile() {
           
           {/* Header Summary */}
           <div className="card" style={{ display: 'flex', gap: '24px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-              <div style={{
-                width: '100px', height: '100px', borderRadius: '50%',
-                background: 'var(--chub-light-lavender)', border: '3px solid var(--chub-pink)',
-                display: 'flex', alignItems: 'center', justifyCenter: 'center', justifyContent: 'center',
-                overflow: 'hidden', flexShrink: 0, position: 'relative', boxShadow: 'var(--shadow-md)'
-              }}>
-                {employee.photo_path ? (
-                  <img 
-                    src={`${API_BASE_URL}/documents/download/${employee.photo_path.split('/').pop()}?token=${localStorage.getItem('token')}`} 
-                    alt="Avatar" 
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
-                ) : (
-                  <User size={44} style={{ color: 'var(--chub-purple)' }} />
-                )}
-              </div>
-              <label 
-                htmlFor="profile-avatar-upload" 
-                className="btn btn-secondary" 
-                style={{ 
-                  padding: '4px 10px', 
-                  fontSize: '11px', 
-                  borderRadius: '16px', 
-                  cursor: 'pointer',
-                  borderWidth: '1px',
-                  textTransform: 'uppercase',
-                  fontWeight: 600,
-                  letterSpacing: '0.5px'
-                }}
-              >
-                {uploadingPhoto ? 'Uploading...' : 'Change Photo'}
-              </label>
-              <input 
-                type="file" 
-                id="profile-avatar-upload" 
-                accept="image/*" 
-                onChange={handlePhotoChange} 
-                style={{ display: 'none' }} 
-                disabled={uploadingPhoto}
-              />
-            </div>
             <div>
               <h3 style={{ fontSize: '22px', color: 'var(--chub-purple)', margin: 0 }}>{employee.full_name}</h3>
               <p style={{ color: 'var(--chub-pink)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase' }}>

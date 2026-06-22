@@ -807,6 +807,93 @@ const securityController = {
       console.error('deleteAuditLogs error:', err.message);
       res.status(500).json({ message: 'Error deleting audit logs.' });
     }
+  },
+
+  // Clear Database (Super Admin only)
+  clearDatabase: async (req, res) => {
+    if (req.user.roleName !== 'Super Admin') {
+      return res.status(403).json({ message: 'Access denied: Only Super Admin can clear the database.' });
+    }
+
+    try {
+      console.log('Super Admin initiating complete Database Clear...');
+
+      // 1. Delete transactional and employee mapping tables first to resolve constraints
+      await supabase.from('attendance_corrections').delete().neq('id', 0);
+      await supabase.from('attendance_logs').delete().neq('id', 0);
+      await supabase.from('leave_requests').delete().neq('id', 0);
+      await supabase.from('leave_balances').delete().neq('id', 0);
+      await supabase.from('employee_kyc').delete().neq('id', 0);
+      await supabase.from('employee_documents').delete().neq('id', 0);
+      await supabase.from('employee_shift_assignments').delete().neq('id', 0);
+
+      // 2. Set reporting manager links to null to avoid self-joins deadlock
+      await supabase.from('employees').update({ reporting_manager_id: null }).neq('id', 0);
+      
+      // 3. Clear employee profiles
+      await supabase.from('employees').delete().neq('id', 0);
+
+      // 4. Clear admin controller configuration and all system log traces
+      await supabase.from('admin_controller_access').delete().neq('id', 0);
+      await supabase.from('audit_logs').delete().neq('id', 0);
+      await supabase.from('login_history').delete().neq('id', 0);
+      await supabase.from('security_events').delete().neq('id', 0);
+
+      // 5. Delete administrative logins (except the Super Admin account itself)
+      await supabase.from('users').delete().neq('email', 'chub.admin@adloaf.com');
+
+      // 6. Delete structural configuration parameters
+      await supabase.from('designations').delete().neq('id', 0);
+      await supabase.from('departments').delete().neq('id', 0);
+      await supabase.from('shifts').delete().neq('id', 0);
+      await supabase.from('work_locations').delete().neq('id', 0);
+
+      // Log this deletion as the only remaining record in a fresh audit trail
+      req.user = { id: 1, email: 'chub.admin@adloaf.com', roleName: 'Super Admin' };
+      await logAudit(req, 'CLEAR_DATABASE_COMPLETE', 'system/all', null, { wiped: true });
+
+      res.json({ message: 'Database cleared successfully. All records wiped, excluding system configuration parameters.' });
+    } catch (err) {
+      console.error('Clear Database Error:', err.message);
+      res.status(500).json({ message: `Error wiping database: ${err.message}` });
+    }
+  },
+
+  // Clear All Employees (Super Admin only)
+  clearEmployees: async (req, res) => {
+    if (req.user.roleName !== 'Super Admin') {
+      return res.status(403).json({ message: 'Access denied: Only Super Admin can clear employees.' });
+    }
+
+    try {
+      console.log('Super Admin initiating Employee Database Clear...');
+
+      // 1. Delete employee-specific transactional entries
+      await supabase.from('attendance_corrections').delete().neq('id', 0);
+      await supabase.from('attendance_logs').delete().neq('id', 0);
+      await supabase.from('leave_requests').delete().neq('id', 0);
+      await supabase.from('leave_balances').delete().neq('id', 0);
+      await supabase.from('employee_kyc').delete().neq('id', 0);
+      await supabase.from('employee_documents').delete().neq('id', 0);
+      await supabase.from('employee_shift_assignments').delete().neq('id', 0);
+
+      // 2. Set reporting manager self-referential foreign keys to null
+      await supabase.from('employees').update({ reporting_manager_id: null }).neq('id', 0);
+      
+      // 3. Clear all employee records
+      await supabase.from('employees').delete().neq('id', 0);
+
+      // 4. Remove legacy employee user credentials (role ID 6) if any
+      await supabase.from('users').delete().eq('role_id', 6);
+
+      // Log audit
+      await logAudit(req, 'CLEAR_EMPLOYEES_COMPLETE', 'system/employees', null, { wipedEmployees: true });
+
+      res.json({ message: 'Employee database cleared successfully. All employee records and metrics have been wiped.' });
+    } catch (err) {
+      console.error('Clear Employees Error:', err.message);
+      res.status(500).json({ message: `Error wiping employee data: ${err.message}` });
+    }
   }
 };
 

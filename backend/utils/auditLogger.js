@@ -50,6 +50,10 @@ async function logAudit(req, actionType, targetRecord = null, oldValue = null, n
       return;
     }
 
+    const now = new Date();
+    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+    const istTime = new Date(utc + (3600000 * 5.5));
+
     await supabase.from('audit_logs').insert([{
       user_id: userId,
       action_type: actionType,
@@ -59,7 +63,8 @@ async function logAudit(req, actionType, targetRecord = null, oldValue = null, n
       old_value: redactSensitiveData(oldValue),
       new_value: redactSensitiveData(newValue),
       ip_address: ipAddress,
-      user_agent: userAgent
+      user_agent: userAgent,
+      created_at: istTime.toISOString()
     }]);
   } catch (err) {
     console.error('Audit logging failed:', err.message);

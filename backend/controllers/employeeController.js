@@ -583,13 +583,13 @@ const employeeController = {
     }
   },
 
-  // Document management: Save upload
+  // Document management: Save file/reference number
   uploadDocument: async (req, res) => {
     const { id } = req.params;
-    const { documentType } = req.body;
+    const { documentType, documentNumber } = req.body;
 
-    if (!req.file) {
-      return res.status(400).json({ message: 'No file attachment provided.' });
+    if (!documentNumber) {
+      return res.status(400).json({ message: 'Document reference number is required.' });
     }
 
     try {
@@ -598,24 +598,23 @@ const employeeController = {
         return res.status(404).json({ message: 'Employee not found.' });
       }
 
-      const docName = req.file.originalname;
-      const docPath = req.file.path.replace(/\\/g, '/');
-      const docSize = req.file.size;
+      const docName = `${documentType} Ref: ${documentNumber}`;
 
       await supabase.from('employee_documents').insert([{
-        employee_id: id, document_type: documentType || 'Other', document_name: docName, file_path: docPath, file_size: docSize
+        employee_id: id,
+        document_type: documentType || 'Other',
+        document_name: docName,
+        document_number: documentNumber,
+        file_path: null,
+        file_size: null
       }]);
 
-      if (documentType === 'Other') {
-        await supabase.from('employees').update({ photo_path: docPath }).eq('id', id);
-      }
+      await logAudit(req, 'SAVE_DOCUMENT_NUMBER', `employees/${id}`, null, { type: documentType, number: documentNumber });
 
-      await logAudit(req, 'UPLOAD_DOCUMENT', `employees/${id}`, null, { type: documentType, name: docName });
-
-      res.json({ message: 'Document uploaded successfully.' });
+      res.json({ message: 'Document file number recorded successfully.' });
     } catch (err) {
-      console.error('Document Upload Error:', err.message);
-      res.status(500).json({ message: 'Error recording document upload.' });
+      console.error('Document Number Recording Error:', err.message);
+      res.status(500).json({ message: 'Error recording document reference number.' });
     }
   },
 
@@ -648,43 +647,7 @@ const employeeController = {
     }
   },
 
-  // Self photo upload handler
-  uploadSelfPhoto: async (req, res) => {
-    if (!req.file) {
-      return res.status(400).json({ message: 'No photo file provided.' });
-    }
-
-    try {
-      const empId = req.user.employeeId;
-
-      if (!empId) {
-        return res.status(404).json({ message: 'Employee profile not found for this user.' });
-      }
-      const docName = req.file.originalname;
-      const docPath = req.file.path.replace(/\\/g, '/');
-      const docSize = req.file.size;
-
-      // Insert document
-      await supabase.from('employee_documents').insert([{
-        employee_id: empId,
-        document_type: 'Other',
-        document_name: docName,
-        file_path: docPath,
-        file_size: docSize
-      }]);
-
-      // Update employee photo
-      await supabase.from('employees').update({ photo_path: docPath }).eq('id', empId);
-
-      // Log audit
-      await logAudit(req, 'UPLOAD_SELF_PHOTO', `employees/${empId}`, null, { name: docName });
-
-      res.json({ message: 'Profile photo updated successfully.', photoPath: docPath });
-    } catch (err) {
-      console.error('Self Photo Upload Error:', err.message);
-      res.status(500).json({ message: 'Error uploading profile photo.' });
-    }
-  }
+  // Self photo upload handler removed
 };
 
 module.exports = employeeController;

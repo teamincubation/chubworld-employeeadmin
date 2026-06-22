@@ -158,8 +158,9 @@ CREATE TABLE IF NOT EXISTS employee_documents (
     employee_id INT NOT NULL,
     document_type TEXT CHECK (document_type IN ('Resume', 'Offer Letter', 'Appointment Letter', 'Contract Agreement', 'Education Certificate', 'Experience Certificate', 'ID Proof', 'Address Proof', 'Bank Proof', 'Other')) NOT NULL,
     document_name VARCHAR(255) NOT NULL,
-    file_path VARCHAR(255) NOT NULL,
-    file_size INT NOT NULL,
+    file_path VARCHAR(255) NULL,
+    file_size INT NULL,
+    document_number VARCHAR(100) NULL,
     uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (employee_id) REFERENCES employees (id) ON DELETE CASCADE
 );

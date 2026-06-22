@@ -178,15 +178,7 @@ export default function Topbar() {
             justifyContent: 'center',
             background: 'var(--chub-gradient)'
           }}>
-            {user?.employee?.photo_path ? (
-              <img 
-                src={`${API_BASE_URL}/documents/download/${user.employee.photo_path.split('/').pop()}?token=${localStorage.getItem('token') || ''}`} 
-                alt="Avatar" 
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              />
-            ) : (
-              <UserIcon size={18} style={{ color: '#FFFFFF' }} />
-            )}
+            <UserIcon size={18} style={{ color: '#FFFFFF' }} />
           </div>
 
         </div>

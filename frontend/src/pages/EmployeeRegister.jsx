@@ -53,9 +53,13 @@ export default function EmployeeRegister() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittingText, setSubmittingText] = useState('');
 
-  // Files state
-  const [photoFile, setPhotoFile] = useState(null);
-  const [documentFiles, setDocumentFiles] = useState([]); // [{ type: '', file: null }]
+  // Document numbers state
+  const [documentNumbers, setDocumentNumbers] = useState({
+    'Resume': '',
+    'Offer Letter': '',
+    'ID Proof': '',
+    'Bank Proof': ''
+  });
 
   const [showKycReveal, setShowKycReveal] = useState(false);
   const [decryptedKyc, setDecryptedKyc] = useState(null);
@@ -128,48 +132,24 @@ export default function EmployeeRegister() {
       console.warn('PIN Code API autocomplete failed. Allowed manual override.', err.message);
     }
   };
-
-  // File Upload Helper
-  const uploadAllFiles = async (employeeId) => {
-    // 1. Upload Photo if selected
-    if (photoFile) {
-      const form = new FormData();
-      form.append('document', photoFile);
-      form.append('documentType', 'Other'); // Will save path to photo_path manually in API or handle via edit
-      // For simplicity, documentType 'Other' will save to employee documents, let's update photo_path via put
-      try {
-        const photoForm = new FormData();
-        photoForm.append('document', photoFile);
-        photoForm.append('documentType', 'Other');
-        await fetch(`${API_BASE_URL}/employees/${employeeId}/documents`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-          body: photoForm
-        });
-      } catch (err) {
-        console.error('Photo upload failed:', err);
-      }
-    }
-
-    // 2. Upload KYC Docs
-    for (const doc of documentFiles) {
-      if (doc.file) {
-        const form = new FormData();
-        form.append('document', doc.file);
-        form.append('documentType', doc.type);
+  // Save document numbers reference to database
+  const saveAllDocumentNumbers = async (employeeId) => {
+    for (const [docType, docNumber] of Object.entries(documentNumbers)) {
+      if (docNumber && docNumber.trim()) {
         try {
-          await fetch(`${API_BASE_URL}/employees/${employeeId}/documents`, {
+          await request(`/employees/${employeeId}/documents`, {
             method: 'POST',
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-            body: form
+            body: {
+              documentType: docType,
+              documentNumber: docNumber.trim()
+            }
           });
         } catch (err) {
-          console.error(`Document upload failed for ${doc.type}:`, err);
+          console.error(`Document save failed for ${docType}:`, err);
         }
       }
     }
   };
-
   const onSubmitWizard = (e) => {
     if (e) e.preventDefault();
     if (step < 5) {
@@ -182,7 +162,6 @@ export default function EmployeeRegister() {
       }
     }
   };
-
   const handleCreateEmployee = async (e) => {
     if (e) e.preventDefault();
     try {
@@ -196,8 +175,8 @@ export default function EmployeeRegister() {
       });
       
       const newId = response.employeeId;
-      setSubmittingText('Uploading employee photo and document attachments...');
-      await uploadAllFiles(newId);
+      setSubmittingText('Recording employee document references...');
+      await saveAllDocumentNumbers(newId);
       
       setIsSubmitting(false);
       setSubmittingText('');
@@ -206,7 +185,7 @@ export default function EmployeeRegister() {
       resetForm();
       fetchListData();
       
-      setSuccessMessage('Employee profile and documents created successfully!');
+      setSuccessMessage('Employee profile and document references created successfully!');
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err) {
       setIsSubmitting(false);
@@ -227,8 +206,8 @@ export default function EmployeeRegister() {
         body: formData
       });
       
-      setSubmittingText('Uploading employee photo and document attachments...');
-      await uploadAllFiles(selectedEmpId);
+      setSubmittingText('Recording employee document references...');
+      await saveAllDocumentNumbers(selectedEmpId);
       
       setIsSubmitting(false);
       setSubmittingText('');
@@ -237,7 +216,7 @@ export default function EmployeeRegister() {
       resetForm();
       fetchListData();
       
-      setSuccessMessage('Employee profile and documents updated successfully!');
+      setSuccessMessage('Employee profile and document references updated successfully!');
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err) {
       setIsSubmitting(false);
@@ -245,7 +224,6 @@ export default function EmployeeRegister() {
       setError(err.message || 'Failed to update employee details.');
     }
   };
-
   const getContractValidity = (contractTillDate) => {
     if (!contractTillDate) return { text: 'Permanent', days: null, color: '#9e9e9e' };
     const today = new Date();
@@ -371,7 +349,6 @@ export default function EmployeeRegister() {
     setStep(1);
     setViewMode('edit');
   };
-
   const resetForm = () => {
     setFormData({
       employee_id: '', full_name: '', mobile: '', email: '',
@@ -389,11 +366,14 @@ export default function EmployeeRegister() {
       aadhaar_number: '', pan_number: '', bank_account_number: '',
       bank_name: '', bank_ifsc: '', upi_id: ''
     });
-    setPhotoFile(null);
-    setDocumentFiles([]);
+    setDocumentNumbers({
+      'Resume': '',
+      'Offer Letter': '',
+      'ID Proof': '',
+      'Bank Proof': ''
+    });
     setStep(1);
   };
-
   // CSV Export for register
   const handleExportCSV = () => {
     if (employees.length === 0) return alert('No data to export.');
@@ -952,16 +932,12 @@ export default function EmployeeRegister() {
                 </div>
               </div>
             )}
-
-            {/* STEP 5: DOCUMENTS UPLOADS */}
+            {/* STEP 5: DOCUMENT REFERENCES */}
             {step === 5 && (
               <div>
-                <div className="form-group">
-                  <label className="form-label">Upload Employee Photo (JPG/PNG)</label>
-                  <input type="file" className="form-control" accept="image/*" onChange={(e) => setPhotoFile(e.target.files[0])} />
-                </div>
-
-                <h4 style={{ fontSize: '15px', color: 'var(--chub-purple)', margin: '20px 0 10px 0' }}>KYC File attachments (PDF/JPG/PNG under 5MB)</h4>
+                <h4 style={{ fontSize: '15px', color: 'var(--chub-purple)', margin: '0 0 20px 0' }}>
+                  Document Reference / File Numbers (All documents are kept in office paper format)
+                </h4>
                 
                 {[
                   { code: 'Resume', name: 'Curriculum Vitae / Resume' },
@@ -969,23 +945,19 @@ export default function EmployeeRegister() {
                   { code: 'ID Proof', name: 'Aadhaar / PAN Card Copy (ID Proof)' },
                   { code: 'Bank Proof', name: 'Cancelled Cheque / Passbook (Bank Proof)' }
                 ].map((docType) => {
-                  const idx = documentFiles.findIndex(df => df.type === docType.code);
                   return (
                     <div key={docType.code} className="form-group" style={{ display: 'flex', gap: '16px', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
                       <span style={{ fontSize: '13px', fontWeight: 600, width: '220px' }}>{docType.name}</span>
                       <input 
-                        type="file" 
+                        type="text" 
                         className="form-control" 
-                        accept=".pdf,.jpg,.jpeg,.png"
+                        placeholder={`Enter ${docType.code} reference/file number`}
+                        value={documentNumbers[docType.code] || ''}
                         onChange={(e) => {
-                          const file = e.target.files[0];
-                          const newDocs = [...documentFiles];
-                          if (idx >= 0) {
-                            newDocs[idx] = { type: docType.code, file };
-                          } else {
-                            newDocs.push({ type: docType.code, file });
-                          }
-                          setDocumentFiles(newDocs);
+                          setDocumentNumbers({
+                            ...documentNumbers,
+                            [docType.code]: e.target.value
+                          });
                         }}
                       />
                     </div>
@@ -993,7 +965,6 @@ export default function EmployeeRegister() {
                 })}
               </div>
             )}
-
             {/* Wizard Navigation */}
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '30px', borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
               <button 
@@ -1045,33 +1016,9 @@ export default function EmployeeRegister() {
               </button>
             </div>
           </div>
-
           {/* Profile Header Sheet */}
           <div className="card" style={{ marginBottom: '24px' }}>
             <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap', alignItems: 'center' }}>
-              <div style={{
-                width: '120px', height: '120px', borderRadius: '16px',
-                background: 'var(--chub-light-lavender)', display: 'flex',
-                alignItems: 'center', justifyCenter: 'center', justifyContent: 'center',
-                overflow: 'hidden', border: '3px solid var(--chub-pink)', flexShrink: 0
-              }}>
-                {profileData.employee.photo_path ? (
-                  <a 
-                    href={`${API_BASE_URL}/documents/download/${profileData.employee.photo_path.split('/').pop()}?token=${localStorage.getItem('token')}`}
-                    download={`photo-${profileData.employee.employee_id}.png`}
-                    title="Click to download employee photo"
-                    style={{ display: 'block', width: '100%', height: '100%' }}
-                  >
-                    <img 
-                      src={`${API_BASE_URL}/documents/download/${profileData.employee.photo_path.split('/').pop()}?token=${localStorage.getItem('token')}`} 
-                      alt="Photo" 
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }}
-                    />
-                  </a>
-                ) : (
-                  <Users size={48} style={{ color: 'var(--chub-purple)' }} />
-                )}
-              </div>
               <div>
                 <h3 style={{ fontSize: '26px', color: 'var(--chub-purple)', marginBottom: '4px' }}>{profileData.employee.full_name}</h3>
                 <p style={{ fontWeight: 600, color: 'var(--chub-pink)', fontSize: '14px', textTransform: 'uppercase', marginBottom: '8px' }}>
@@ -1085,7 +1032,6 @@ export default function EmployeeRegister() {
               </div>
             </div>
           </div>
-
           <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
             {/* Column 1: Personal & Addresses */}
             <div style={{ flex: 1, minWidth: '300px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -1167,34 +1113,45 @@ export default function EmployeeRegister() {
                   </div>
                 )}
               </div>
-
               {/* Attachments Card */}
               <div className="card">
                 <h4 style={{ fontSize: '15px', color: 'var(--chub-purple)', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', marginBottom: '16px' }}>
-                  Uploaded Documents
+                  On-File Documents
                 </h4>
                 {profileData.documents.length === 0 ? (
-                  <p style={{ fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center' }}>No documents uploaded yet.</p>
+                  <p style={{ fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center' }}>No documents recorded yet.</p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     {profileData.documents.map((doc) => (
                       <div key={doc.id} className="flex-between" style={{ padding: '8px 12px', backgroundColor: 'var(--bg-primary)', borderRadius: '6px', fontSize: '13px' }}>
                         <span style={{ fontWeight: 600 }}>{doc.document_type}</span>
-                        <a 
-                          href={`${API_BASE_URL}/documents/download/id-${doc.id}?token=${localStorage.getItem('token')}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--chub-pink)', textDecoration: 'none' }}
-                          title={`Click to view/download ${doc.document_name}`}
-                        >
-                          <FileText size={14} /> {doc.document_name}
-                        </a>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <span style={{ color: 'var(--text-muted)' }}>{doc.document_number || doc.document_name}</span>
+                          <button 
+                            type="button"
+                            onClick={async () => {
+                              if (window.confirm('Delete this document number reference?')) {
+                                try {
+                                  await request(`/employees/documents/${doc.id}`, { method: 'DELETE' });
+                                  alert('Document reference deleted.');
+                                  // Refresh profile data
+                                  handleLoadProfile(selectedEmpId);
+                                } catch (e) {
+                                  alert(e.message);
+                                }
+                              }
+                            }}
+                            className="btn btn-secondary"
+                            style={{ padding: '2px 6px', fontSize: '11px', border: 'none' }}
+                          >
+                            <Trash2 size={12} style={{ color: 'var(--color-error)' }} />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
-
             </div>
           </div>
         </div>
