@@ -328,7 +328,7 @@ const authController = {
 
       if (empError || !employees || employees.length === 0) {
         await recordLoginHistory(null, email, ip, userAgent, 'Failed', 'Google email not registered in employees database');
-        return res.status(403).json({ message: `Access denied: The email address (${email}) is not registered in the C-Hub employees registry.` });
+        return res.status(403).json({ message: 'You are not a an employee at Chub or this email not synced with your employee register. Kindly connect your manager.' });
       }
 
       const employee = employees[0];

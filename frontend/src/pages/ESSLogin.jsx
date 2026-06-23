@@ -80,7 +80,7 @@ export default function ESSLogin() {
         if (container) {
           window.google.accounts.id.renderButton(
             container,
-            { theme: 'outline', size: 'large', width: 372, text: 'signin_with' }
+            { theme: 'outline', size: 'large', width: 372, shape: 'pill', text: 'signin_with' }
           );
         }
       }
@@ -251,24 +251,37 @@ export default function ESSLogin() {
         {/* Premium Google Sign-in Card */}
         <div style={{
           background: 'linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(216,90,166,0.05) 100%)',
-          border: '1px solid rgba(216, 90, 166, 0.2)',
-          borderRadius: '16px',
-          padding: '16px',
+          border: '1px solid rgba(216, 90, 166, 0.15)',
+          borderRadius: '24px',
+          padding: '24px',
           marginBottom: '24px',
-          boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.1), 0 8px 16px rgba(0,0,0,0.2)'
+          boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.1), 0 8px 16px rgba(0,0,0,0.2)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center'
         }}>
+          {/* Circular Google Icon at the top */}
           <div style={{
-            fontSize: '11px',
-            color: 'var(--chub-pink)',
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-            textAlign: 'center',
-            marginBottom: '10px'
+            width: '64px',
+            height: '64px',
+            borderRadius: '50%',
+            border: '1.5px solid #747775',
+            backgroundColor: '#FFFFFF',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '20px',
+            boxShadow: '0 4px 10px rgba(0, 0, 0, 0.3)'
           }}>
-            Instant One-Tap Access
+            <img 
+              src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" 
+              alt="Google Logo" 
+              style={{ width: '28px', height: '28px' }} 
+            />
           </div>
-          <div style={{ display: 'flex', justifyContent: 'center' }}>
+
+          {/* Pill-shaped Google sign-in button */}
+          <div style={{ display: 'flex', justifyContent: 'center', colorScheme: 'light', width: '100%' }}>
             <div id="google-signin-btn" style={{ width: '100%', display: 'flex', justifyContent: 'center' }}></div>
           </div>
         </div>

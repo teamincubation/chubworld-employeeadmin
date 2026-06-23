@@ -497,9 +497,31 @@ const securityController = {
   updateSystemSettings: async (req, res) => {
     const { settings } = req.body; // Object: { key: value, key2: value2 }
 
+    const keyDescriptions = {
+      company_name: 'The legal official company name display',
+      tagline: 'Branding tagline displayed on logins and dashboard',
+      geofence_enforced: 'Whether attendance clock-in requires matching work location radius coordinates',
+      auto_clockout_duration: 'Auto Clock-out Duration Threshold (Hours)',
+      paycut_absent: 'Unexcused Absence Salary Cut percentage',
+      paycut_lop: 'Loss of Pay (LOP) Salary Cut percentage',
+      paycut_half_day: 'Half Day Work Salary Cut percentage',
+      smtp_host: 'Mail server host for password reset email dispatches',
+      smtp_port: 'Secure mail server port',
+      smtp_user: 'System email account credentials',
+      smtp_pass: 'System email security password',
+      admin_creation_limit: 'Max number of admins the Admin Controller can create'
+    };
+
     try {
       for (const [key, val] of Object.entries(settings)) {
-        await supabase.from('system_settings').update({ setting_value: String(val) }).eq('setting_key', key);
+        const payload = {
+          setting_key: key,
+          setting_value: String(val)
+        };
+        if (keyDescriptions[key]) {
+          payload.description = keyDescriptions[key];
+        }
+        await supabase.from('system_settings').upsert(payload, { onConflict: 'setting_key' });
       }
 
       await logAudit(req, 'UPDATE_SYSTEM_SETTINGS', 'system_settings', null, settings);
