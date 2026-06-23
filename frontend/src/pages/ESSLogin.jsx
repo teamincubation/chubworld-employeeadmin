@@ -5,7 +5,7 @@ import { Lock, Mail, ShieldAlert, Smartphone, Download, CheckCircle, Eye, EyeOff
 
 
 export default function ESSLogin() {
-  const { login, loginWithGoogle } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState('');
@@ -32,74 +32,7 @@ export default function ESSLogin() {
     }
   }, []);
 
-  const handleGoogleLoginSuccess = async (response) => {
-    if (!response.credential) return;
-    setError('');
-    setSubmitting(true);
-
-    const proceedGoogleLogin = async (currentCoords) => {
-      try {
-        await loginWithGoogle(response.credential, currentCoords);
-        navigate('/');
-      } catch (err) {
-        console.error(err);
-        setError(err.message || 'Google verification failed.');
-        setSubmitting(false);
-      }
-    };
-
-    if (!coords && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const freshCoords = {
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude
-          };
-          setCoords(freshCoords);
-          proceedGoogleLogin(freshCoords);
-        },
-        (err) => {
-          console.warn('Geolocation failed on google login submit:', err.message);
-          proceedGoogleLogin(null);
-        },
-        { enableHighAccuracy: true, timeout: 2000 }
-      );
-    } else {
-      proceedGoogleLogin(coords);
-    }
-  };
-
-  useEffect(() => {
-    const initGoogleBtn = () => {
-      if (window.google) {
-        window.google.accounts.id.initialize({
-          client_id: '569944481961-t4ckmi7489bultilo6nvv67m7d1uj965.apps.googleusercontent.com',
-          callback: handleGoogleLoginSuccess
-        });
-        const container = document.getElementById('google-signin-btn');
-        if (container) {
-          window.google.accounts.id.renderButton(
-            container,
-            { theme: 'outline', size: 'large', width: 372, shape: 'pill', text: 'signin_with' }
-          );
-        }
-      }
-    };
-
-    const existingScript = document.getElementById('google-jssdk');
-    if (existingScript) {
-      initGoogleBtn();
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.id = 'google-jssdk';
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.onload = initGoogleBtn;
-    document.body.appendChild(script);
-  }, [coords]);
+  // Geolocation coordinates are captured and used during employee credential clock-in submit
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -248,58 +181,7 @@ export default function ESSLogin() {
           </div>
         )}
 
-        {/* Premium Google Sign-in Card */}
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(216,90,166,0.05) 100%)',
-          border: '1px solid rgba(216, 90, 166, 0.15)',
-          borderRadius: '24px',
-          padding: '24px',
-          marginBottom: '24px',
-          boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.1), 0 8px 16px rgba(0,0,0,0.2)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center'
-        }}>
-          {/* Circular Google Icon at the top */}
-          <div style={{
-            width: '64px',
-            height: '64px',
-            borderRadius: '50%',
-            border: '1.5px solid #747775',
-            backgroundColor: '#FFFFFF',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: '20px',
-            boxShadow: '0 4px 10px rgba(0, 0, 0, 0.3)'
-          }}>
-            <img 
-              src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" 
-              alt="Google Logo" 
-              style={{ width: '28px', height: '28px' }} 
-            />
-          </div>
 
-          {/* Pill-shaped Google sign-in button */}
-          <div style={{ display: 'flex', justifyContent: 'center', colorScheme: 'light', width: '100%' }}>
-            <div id="google-signin-btn" style={{ width: '100%', display: 'flex', justifyContent: 'center' }}></div>
-          </div>
-        </div>
-
-        {/* OR Divider */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          marginBottom: '20px',
-          color: '#6B6470',
-          fontSize: '11px',
-          fontWeight: 600,
-          letterSpacing: '0.5px'
-        }}>
-          <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.05)' }}></div>
-          <span style={{ padding: '0 10px', textTransform: 'uppercase' }}>Or Sign In With Email</span>
-          <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.05)' }}></div>
-        </div>
 
         {/* Login Form */}
         <form onSubmit={handleSubmit}>
