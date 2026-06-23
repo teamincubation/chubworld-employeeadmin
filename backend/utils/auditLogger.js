@@ -50,6 +50,17 @@ async function logAudit(req, actionType, targetRecord = null, oldValue = null, n
       return;
     }
 
+    let lat = null;
+    let lng = null;
+    if (req && req.body) {
+      if (req.body.latitude !== undefined && req.body.latitude !== null) {
+        lat = parseFloat(req.body.latitude) || null;
+      }
+      if (req.body.longitude !== undefined && req.body.longitude !== null) {
+        lng = parseFloat(req.body.longitude) || null;
+      }
+    }
+
     const now = new Date();
     const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
     const istTime = new Date(utc + (3600000 * 5.5));
@@ -64,6 +75,8 @@ async function logAudit(req, actionType, targetRecord = null, oldValue = null, n
       new_value: redactSensitiveData(newValue),
       ip_address: ipAddress,
       user_agent: userAgent,
+      latitude: lat,
+      longitude: lng,
       created_at: istTime.toISOString()
     }]);
   } catch (err) {

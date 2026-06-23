@@ -56,11 +56,17 @@ export function AuthProvider({ children }) {
   };
 
 
-  const login = async (email, password, portal = 'admin') => {
+  const login = async (email, password, portal = 'admin', coords = null) => {
+    const body = { email, password, portal };
+    if (coords) {
+      body.latitude = coords.latitude;
+      body.longitude = coords.longitude;
+    }
+
     const res = await fetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, portal })
+      body: JSON.stringify(body)
     });
 
     const data = await res.json();
@@ -74,11 +80,17 @@ export function AuthProvider({ children }) {
     return data.user;
   };
 
-  const loginWithGoogle = async (googleToken) => {
+  const loginWithGoogle = async (googleToken, coords = null) => {
+    const body = { token: googleToken };
+    if (coords) {
+      body.latitude = coords.latitude;
+      body.longitude = coords.longitude;
+    }
+
     const res = await fetch(`${API_BASE_URL}/auth/google-login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: googleToken })
+      body: JSON.stringify(body)
     });
 
     const data = await res.json();

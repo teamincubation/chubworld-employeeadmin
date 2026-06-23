@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Lock, Mail, ShieldAlert, Eye, EyeOff } from 'lucide-react';
@@ -12,6 +12,25 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [coords, setCoords] = useState(null);
+
+  useEffect(() => {
+    // Proactively request browser geolocation permissions on mount
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setCoords({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude
+          });
+        },
+        (err) => {
+          console.warn('Geolocation permission denied or failed:', err.message);
+        },
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    }
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -21,14 +40,35 @@ export default function Login() {
     setError('');
     setSubmitting(true);
 
-    try {
-      await login(email, password);
-      navigate('/');
-    } catch (err) {
-      console.error(err);
-      setError(err.message || 'Login failed. Please check your credentials.');
-    } finally {
-      setSubmitting(false);
+    const proceedLogin = async (currentCoords) => {
+      try {
+        await login(email, password, 'admin', currentCoords);
+        navigate('/');
+      } catch (err) {
+        console.error(err);
+        setError(err.message || 'Login failed. Please check your credentials.');
+        setSubmitting(false);
+      }
+    };
+
+    if (!coords && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const freshCoords = {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude
+          };
+          setCoords(freshCoords);
+          proceedLogin(freshCoords);
+        },
+        (err) => {
+          console.warn('Geolocation failed on submit:', err.message);
+          proceedLogin(null);
+        },
+        { enableHighAccuracy: true, timeout: 2000 }
+      );
+    } else {
+      proceedLogin(coords);
     }
   };
 

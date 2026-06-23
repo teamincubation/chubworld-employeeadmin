@@ -52,6 +52,11 @@ export default function SecurityCenter() {
   const [filterFromDate, setFilterFromDate] = useState('');
   const [filterToDate, setFilterToDate] = useState('');
 
+  // Pagination states for audit logs
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditLimit, setAuditLimit] = useState(100);
+  const [totalAuditLogs, setTotalAuditLogs] = useState(0);
+
   // Reset password modal state
   const [showResetModal, setShowResetModal] = useState(false);
 
@@ -215,7 +220,7 @@ export default function SecurityCenter() {
 
   useEffect(() => {
     fetchData();
-  }, [activeTab, holidayYear]);
+  }, [activeTab, holidayYear, auditPage, auditLimit]);
 
   useEffect(() => {
     const resolveIps = async () => {
@@ -350,13 +355,243 @@ export default function SecurityCenter() {
     }
   };
 
+  const handleExportCSV = async () => {
+    try {
+      const res = await request(`/security/audit-logs?user=${filterUser}&actionType=${filterAction}&fromDate=${filterFromDate}&toDate=${filterToDate}&exportAll=true`);
+      const allLogs = res.logs || [];
+      if (allLogs.length === 0) {
+        alert('No audit logs available to export.');
+        return;
+      }
+
+      const headers = ['Timestamp (IST)', 'Action Type', 'Performed By', 'Role', 'IP Address', 'Location Coordinates', 'Target Node', 'User Agent'];
+      const rows = allLogs.map(log => [
+        new Date(log.created_at).toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }),
+        log.action_type,
+        log.performed_by,
+        log.role,
+        log.ip_address,
+        log.latitude && log.longitude ? `${log.latitude};${log.longitude}` : 'N/A',
+        log.target_record || 'N/A',
+        log.user_agent.replace(/"/g, '""')
+      ]);
+
+      const csvContent = "data:text/csv;charset=utf-8," 
+        + [headers.join(','), ...rows.map(r => r.map(val => `"${val || ''}"`).join(','))].join('\n');
+      
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `audit_trail_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      alert('Export CSV failed: ' + err.message);
+    }
+  };
+
+  const handleExportPDF = async () => {
+    try {
+      const res = await request(`/security/audit-logs?user=${filterUser}&actionType=${filterAction}&fromDate=${filterFromDate}&toDate=${filterToDate}&exportAll=true`);
+      const allLogs = res.logs || [];
+      if (allLogs.length === 0) {
+        alert('No audit logs available to export.');
+        return;
+      }
+
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>C-Hub Audit Logs Report</title>
+            <style>
+              body {
+                font-family: 'Inter', sans-serif;
+                color: #101010;
+                padding: 40px;
+                background-color: #ffffff;
+              }
+              .header {
+                display: flex;
+                align-items: center;
+                border-bottom: 2px solid #42174F;
+                padding-bottom: 20px;
+                margin-bottom: 30px;
+              }
+              .logo {
+                width: 60px;
+                height: 60px;
+                border-radius: 12px;
+                margin-right: 20px;
+              }
+              .title-area h1 {
+                margin: 0;
+                font-size: 24px;
+                color: #42174F;
+                text-transform: uppercase;
+                font-family: 'Outfit', sans-serif;
+              }
+              .title-area span {
+                font-size: 12px;
+                color: #D85AA6;
+                font-weight: bold;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+              }
+              .meta-info {
+                margin-left: auto;
+                text-align: right;
+                font-size: 13px;
+                line-height: 1.5;
+              }
+              .custom-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 20px;
+                font-size: 11px;
+              }
+              .custom-table th {
+                background-color: #f5e8f7;
+                color: #42174F;
+                font-weight: 600;
+                text-align: left;
+                padding: 10px 12px;
+                border-bottom: 2px solid #e2d9e5;
+                text-transform: uppercase;
+              }
+              .custom-table td {
+                padding: 10px 12px;
+                border-bottom: 1px solid #e2d9e5;
+                color: #101010;
+              }
+              .custom-table tr:nth-child(even) {
+                background-color: #faf8fb;
+              }
+              .badge {
+                font-size: 10px;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-weight: 600;
+                background-color: #e2d9e5;
+                color: #42174F;
+              }
+              .footer {
+                margin-top: 40px;
+                border-top: 1px solid #e2d9e5;
+                padding-top: 15px;
+                font-size: 11px;
+                color: #6b6470;
+                display: flex;
+                justify-content: space-between;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <img src="/logo.jpeg" class="logo" alt="Logo" />
+              <div class="title-area">
+                <h1>C-Hub Operations Audit Report</h1>
+                <span>Creating Wow World</span>
+              </div>
+              <div class="meta-info">
+                <div><strong>Exported By:</strong> \${user?.email || 'Administrator'}</div>
+                <div><strong>Date:</strong> \${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}</div>
+                <div><strong>Total Logs:</strong> \${allLogs.length}</div>
+              </div>
+            </div>
+            
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>Timestamp (IST)</th>
+                  <th>Action Type</th>
+                  <th>Performed By</th>
+                  <th>Role</th>
+                  <th>IP Address</th>
+                  <th>Coordinates</th>
+                  <th>Target Node</th>
+                </tr>
+              </thead>
+              <tbody>
+                \${allLogs.map(log => \`
+                  <tr>
+                    <td>\${new Date(log.created_at).toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}</td>
+                    <td><strong>\${log.action_type}</strong></td>
+                    <td>\${log.performed_by}</td>
+                    <td><span class="badge">\${log.role}</span></td>
+                    <td>\${log.ip_address}</td>
+                    <td>\${log.latitude && log.longitude ? \`\${log.latitude.toFixed(5)}, \${log.longitude.toFixed(5)}\` : 'N/A'}</td>
+                    <td><code>\${log.target_record || 'N/A'}</code></td>
+                  </tr>
+                \`).join('')}
+              </tbody>
+            </table>
+
+            <div class="footer">
+              <span>Generated from C-Hub Security & Audits Management Center</span>
+              <span>Standard timezone: IST (Asia/Kolkata)</span>
+            </div>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+      }, 500);
+    } catch (err) {
+      alert('Export PDF failed: ' + err.message);
+    }
+  };
+
+  const isSubAdminRole = (role) => {
+    return role && role !== 'Employee' && role !== 'Super Admin' && role !== 'Admin Controller';
+  };
+
+  const canManageUser = (action, targetUser) => {
+    if (!user || !targetUser) return false;
+    
+    const actorRole = user.role;
+    const actorId = parseInt(user.id, 10);
+    const targetId = parseInt(targetUser.id, 10);
+    const targetRole = targetUser.role_name;
+
+    // 1. Self-management check
+    if (actorId === targetId) return false;
+
+    // 2. Super Admin target
+    if (targetRole === 'Super Admin') {
+      if (action === 'purge') return false;
+      return actorRole === 'Super Admin';
+    }
+
+    // 3. Admin Controller target
+    if (targetRole === 'Admin Controller') {
+      return actorRole === 'Super Admin';
+    }
+
+    // 4. Sub-admin target
+    if (isSubAdminRole(targetRole)) {
+      return actorRole === 'Super Admin' || actorRole === 'Admin Controller';
+    }
+
+    // 5. Employee target
+    if (targetRole === 'Employee') {
+      return actorRole === 'Super Admin' || actorRole === 'Admin Controller' || isSubAdminRole(actorRole);
+    }
+
+    return false;
+  };
+
   const fetchData = async () => {
     setLoading(true);
     setError('');
     try {
       if (activeTab === 'audits') {
-        const list = await request(`/security/audit-logs?user=${filterUser}&actionType=${filterAction}&fromDate=${filterFromDate}&toDate=${filterToDate}`);
-        setAudits(list);
+        const res = await request(`/security/audit-logs?user=${filterUser}&actionType=${filterAction}&fromDate=${filterFromDate}&toDate=${filterToDate}&page=${auditPage}&limit=${auditLimit}`);
+        setAudits(res.logs || []);
+        setTotalAuditLogs(res.total || 0);
       } else if (activeTab === 'users') {
         const list = await request('/security/users');
         setUsers(list);
@@ -402,7 +637,11 @@ export default function SecurityCenter() {
 
   const handleAuditSearch = (e) => {
     e.preventDefault();
-    fetchData();
+    if (auditPage === 1) {
+      fetchData();
+    } else {
+      setAuditPage(1);
+    }
   };
 
   const handleDeleteLogs = async (logIds) => {
@@ -1069,22 +1308,25 @@ export default function SecurityCenter() {
                               <button 
                                 onClick={() => handleToggleUserStatus(usr.id, usr.status)}
                                 className="btn btn-secondary"
-                                style={{ padding: '6px 12px', fontSize: '12px' }}
+                                style={{ padding: '6px 12px', fontSize: '12px', opacity: canManageUser('status', usr) ? 1 : 0.5, cursor: canManageUser('status', usr) ? 'pointer' : 'not-allowed' }}
+                                disabled={!canManageUser('status', usr)}
                               >
                                 {usr.status === 'active' ? 'Deactivate' : 'Activate'}
                               </button>
                               <button 
                                 onClick={() => { setTargetUserId(usr.id); setShowResetModal(true); }}
                                 className="btn btn-primary"
-                                style={{ padding: '6px 12px', fontSize: '12px' }}
+                                style={{ padding: '6px 12px', fontSize: '12px', opacity: canManageUser('reset', usr) ? 1 : 0.5, cursor: canManageUser('reset', usr) ? 'pointer' : 'not-allowed' }}
+                                disabled={!canManageUser('reset', usr)}
                               >
                                 <Key size={12} /> Force Reset
                               </button>
                               <button 
                                 onClick={() => handleHardDeleteUser(usr.id, usr.email)}
                                 className="btn btn-secondary"
-                                style={{ padding: '6px 12px', fontSize: '12px', borderColor: 'var(--color-error)', color: 'var(--color-error)' }}
-                                title="Purge all user database records and files"
+                                style={{ padding: '6px 12px', fontSize: '12px', borderColor: 'var(--color-error)', color: 'var(--color-error)', opacity: canManageUser('purge', usr) ? 1 : 0.5, cursor: canManageUser('purge', usr) ? 'pointer' : 'not-allowed' }}
+                                title={canManageUser('purge', usr) ? "Purge all user database records and files" : "Unauthorized to purge this account"}
+                                disabled={!canManageUser('purge', usr)}
                               >
                                 <Trash2 size={12} /> Purge All
                               </button>

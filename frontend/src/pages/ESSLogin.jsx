@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Lock, Mail, ShieldAlert, Smartphone, Download, CheckCircle, Eye, EyeOff } from 'lucide-react';
 
+
 export default function ESSLogin() {
   const { login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
@@ -12,19 +13,59 @@ export default function ESSLogin() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [coords, setCoords] = useState(null);
+
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setCoords({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude
+          });
+        },
+        (err) => {
+          console.warn('Geolocation permission denied or failed:', err.message);
+        },
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    }
+  }, []);
 
   const handleGoogleLoginSuccess = async (response) => {
     if (!response.credential) return;
     setError('');
     setSubmitting(true);
-    try {
-      await loginWithGoogle(response.credential);
-      navigate('/');
-    } catch (err) {
-      console.error(err);
-      setError(err.message || 'Google verification failed.');
-    } finally {
-      setSubmitting(false);
+
+    const proceedGoogleLogin = async (currentCoords) => {
+      try {
+        await loginWithGoogle(response.credential, currentCoords);
+        navigate('/');
+      } catch (err) {
+        console.error(err);
+        setError(err.message || 'Google verification failed.');
+        setSubmitting(false);
+      }
+    };
+
+    if (!coords && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const freshCoords = {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude
+          };
+          setCoords(freshCoords);
+          proceedGoogleLogin(freshCoords);
+        },
+        (err) => {
+          console.warn('Geolocation failed on google login submit:', err.message);
+          proceedGoogleLogin(null);
+        },
+        { enableHighAccuracy: true, timeout: 2000 }
+      );
+    } else {
+      proceedGoogleLogin(coords);
     }
   };
 
@@ -58,7 +99,7 @@ export default function ESSLogin() {
     script.defer = true;
     script.onload = initGoogleBtn;
     document.body.appendChild(script);
-  }, []);
+  }, [coords]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -68,15 +109,35 @@ export default function ESSLogin() {
     setError('');
     setSubmitting(true);
 
-    try {
-      // Pass 'employee' portal parameter to ensure role is strictly checked in the backend
-      await login(email, password, 'employee');
-      navigate('/');
-    } catch (err) {
-      console.error(err);
-      setError(err.message || 'Verification failed. Confirm your credentials.');
-    } finally {
-      setSubmitting(false);
+    const proceedLogin = async (currentCoords) => {
+      try {
+        await login(email, password, 'employee', currentCoords);
+        navigate('/');
+      } catch (err) {
+        console.error(err);
+        setError(err.message || 'Verification failed. Confirm your credentials.');
+        setSubmitting(false);
+      }
+    };
+
+    if (!coords && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const freshCoords = {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude
+          };
+          setCoords(freshCoords);
+          proceedLogin(freshCoords);
+        },
+        (err) => {
+          console.warn('Geolocation failed on submit:', err.message);
+          proceedLogin(null);
+        },
+        { enableHighAccuracy: true, timeout: 2000 }
+      );
+    } else {
+      proceedLogin(coords);
     }
   };
 

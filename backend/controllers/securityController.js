@@ -4,14 +4,13 @@ const { logAudit } = require('../utils/auditLogger');
 const nodemailer = require('nodemailer');
 
 const securityController = {
-  // Fetch security audit logs with advanced filters
   getAuditLogs: async (req, res) => {
-    const { fromDate, toDate, user, actionType } = req.query;
+    const { fromDate, toDate, user, actionType, page = 1, limit = 100, exportAll } = req.query;
 
-    let query = supabase.from('audit_logs').select('*')
+    let query = supabase.from('audit_logs').select('*', { count: 'exact' })
       .neq('performed_by', 'chub.admin@adloaf.com')
       .neq('role', 'Super Admin')
-      .order('id', { ascending: false }).limit(100);
+      .order('id', { ascending: false });
 
     if (fromDate && toDate) {
       query = query.gte('created_at', `${fromDate} 00:00:00`).lte('created_at', `${toDate} 23:59:59`);
@@ -25,10 +24,25 @@ const securityController = {
       query = query.eq('action_type', actionType);
     }
 
+    // Apply pagination only if not exporting all logs
+    const isExport = exportAll === 'true';
+    if (!isExport) {
+      const parsedPage = parseInt(page, 10) || 1;
+      const parsedLimit = parseInt(limit, 10) || 100;
+      const offset = (parsedPage - 1) * parsedLimit;
+      query = query.range(offset, offset + parsedLimit - 1);
+    } else {
+      // Set a high upper limit to fetch all matching logs for download
+      query = query.range(0, 99999);
+    }
+
     try {
-      const { data: logs, error } = await query;
+      const { data: logs, error, count } = await query;
       if (error) throw error;
-      res.json(logs || []);
+      res.json({
+        logs: logs || [],
+        total: count || 0
+      });
     } catch (err) {
       console.error('GetAuditLogs Error:', err.message);
       res.status(500).json({ message: 'Error retrieving system audit logs.' });
@@ -130,9 +144,49 @@ const securityController = {
     }
 
     try {
-      const { data: current, error: curErr } = await supabase.from('users').select('email, status').eq('id', userId);
-      if (curErr || !current || current.length === 0) {
+      const { data: targetUsers, error: curErr } = await supabase
+        .from('users')
+        .select('id, email, status, role_id, roles(name)')
+        .eq('id', userId);
+
+      if (curErr || !targetUsers || targetUsers.length === 0) {
         return res.status(404).json({ message: 'User account not found.' });
+      }
+      const targetUser = targetUsers[0];
+
+      const actorId = parseInt(req.user.id, 10);
+      const targetId = parseInt(targetUser.id, 10);
+      const actorRole = req.user.roleName;
+      const targetRole = targetUser.roles ? targetUser.roles.name : null;
+
+      // 1. Self-management check
+      if (actorId === targetId) {
+        return res.status(403).json({ message: 'Access denied: You cannot modify your own account status.' });
+      }
+
+      // 2. Super Admin target
+      if (targetRole === 'Super Admin') {
+        if (actorRole !== 'Super Admin') {
+          return res.status(403).json({ message: 'Access denied: Only Super Admin can manage Super Admin accounts.' });
+        }
+      }
+
+      // 3. Admin Controller target
+      if (targetRole === 'Admin Controller') {
+        if (actorRole !== 'Super Admin') {
+          return res.status(403).json({ message: 'Access denied: Only Super Admin can manage Admin Controller accounts.' });
+        }
+      }
+
+      const isSubAdminRole = (role) => {
+        return role && role !== 'Employee' && role !== 'Super Admin' && role !== 'Admin Controller';
+      };
+
+      // 4. Sub-admin target
+      if (isSubAdminRole(targetRole)) {
+        if (actorRole !== 'Super Admin' && actorRole !== 'Admin Controller') {
+          return res.status(403).json({ message: 'Access denied: Sub-admins can only be managed by Super Admin or Admin Controller.' });
+        }
       }
 
       await supabase.from('users').update({ status }).eq('id', userId);
@@ -145,7 +199,7 @@ const securityController = {
       }
 
       // Log Security audit
-      await logAudit(req, `USER_LOGIN_${status.toUpperCase()}`, `users/${userId}`, current[0], { status });
+      await logAudit(req, `USER_LOGIN_${status.toUpperCase()}`, `users/${userId}`, { email: targetUser.email, status: targetUser.status }, { status });
 
       res.json({ message: `User account is now ${status}.` });
     } catch (err) {
@@ -164,9 +218,49 @@ const securityController = {
     }
 
     try {
-      const { data: users, error } = await supabase.from('users').select('email').eq('id', userId);
-      if (error || !users || users.length === 0) {
+      const { data: targetUsers, error: findErr } = await supabase
+        .from('users')
+        .select('id, email, role_id, roles(name)')
+        .eq('id', userId);
+
+      if (findErr || !targetUsers || targetUsers.length === 0) {
         return res.status(404).json({ message: 'User account not found.' });
+      }
+      const targetUser = targetUsers[0];
+
+      const actorId = parseInt(req.user.id, 10);
+      const targetId = parseInt(targetUser.id, 10);
+      const actorRole = req.user.roleName;
+      const targetRole = targetUser.roles ? targetUser.roles.name : null;
+
+      // 1. Self-management check
+      if (actorId === targetId) {
+        return res.status(403).json({ message: 'Access denied: You cannot reset your own password via this admin feature.' });
+      }
+
+      // 2. Super Admin target
+      if (targetRole === 'Super Admin') {
+        if (actorRole !== 'Super Admin') {
+          return res.status(403).json({ message: 'Access denied: Only Super Admin can manage Super Admin accounts.' });
+        }
+      }
+
+      // 3. Admin Controller target
+      if (targetRole === 'Admin Controller') {
+        if (actorRole !== 'Super Admin') {
+          return res.status(403).json({ message: 'Access denied: Only Super Admin can manage Admin Controller accounts.' });
+        }
+      }
+
+      const isSubAdminRole = (role) => {
+        return role && role !== 'Employee' && role !== 'Super Admin' && role !== 'Admin Controller';
+      };
+
+      // 4. Sub-admin target
+      if (isSubAdminRole(targetRole)) {
+        if (actorRole !== 'Super Admin' && actorRole !== 'Admin Controller') {
+          return res.status(403).json({ message: 'Access denied: Sub-admins can only be managed by Super Admin or Admin Controller.' });
+        }
       }
 
       const salt = await bcrypt.genSalt(10);
@@ -187,16 +281,6 @@ const securityController = {
   hardDeleteUser: async (req, res) => {
     const { userId } = req.params;
 
-    // Sub-admins cannot delete any user/data
-    if (req.user.roleName !== 'Super Admin' && req.user.roleName !== 'Admin Controller') {
-      return res.status(403).json({ message: 'Access denied: Sub-admins are not authorized to delete system data.' });
-    }
-
-    // Block self-deletion for anyone except Super Admin
-    if (parseInt(userId, 10) === parseInt(req.user.id, 10) && req.user.roleName !== 'Super Admin') {
-      return res.status(403).json({ message: 'Access denied: You cannot delete your own account.' });
-    }
-
     try {
       // Get target user details to check their role/email
       const { data: targetUser, error: checkErr } = await supabase
@@ -209,10 +293,42 @@ const securityController = {
         return res.status(404).json({ message: 'User account not found.' });
       }
 
-      if (targetUser.roles && (targetUser.roles.name === 'Super Admin' || targetUser.roles.name === 'Admin Controller')) {
-        if (req.user.roleName !== 'Super Admin') {
-          return res.status(403).json({ message: 'Access denied: Cannot delete Admin Controller or Super Admin records.' });
+      const actorId = parseInt(req.user.id, 10);
+      const targetId = parseInt(targetUser.id, 10);
+      const actorRole = req.user.roleName;
+      const targetRole = targetUser.roles ? targetUser.roles.name : null;
+
+      // 1. Self-management check: No one can delete their own account
+      if (actorId === targetId) {
+        return res.status(403).json({ message: 'Access denied: You cannot delete your own account.' });
+      }
+
+      // 2. Super Admin target: No one can delete Super Admin accounts
+      if (targetRole === 'Super Admin') {
+        return res.status(403).json({ message: 'Access denied: Super Admin accounts cannot be deleted by anyone.' });
+      }
+
+      // 3. Admin Controller target
+      if (targetRole === 'Admin Controller') {
+        if (actorRole !== 'Super Admin') {
+          return res.status(403).json({ message: 'Access denied: Only Super Admin can delete Admin Controller accounts.' });
         }
+      }
+
+      const isSubAdminRole = (role) => {
+        return role && role !== 'Employee' && role !== 'Super Admin' && role !== 'Admin Controller';
+      };
+
+      // 4. Sub-admin target
+      if (isSubAdminRole(targetRole)) {
+        if (actorRole !== 'Super Admin' && actorRole !== 'Admin Controller') {
+          return res.status(403).json({ message: 'Access denied: Only Super Admin or Admin Controller can delete Sub-admin accounts.' });
+        }
+      }
+
+      // 5. Employee target
+      if (actorRole !== 'Super Admin' && actorRole !== 'Admin Controller' && !isSubAdminRole(actorRole)) {
+        return res.status(403).json({ message: 'Access denied: Unauthorized role to delete employee data.' });
       }
 
       const userRecord = targetUser;
