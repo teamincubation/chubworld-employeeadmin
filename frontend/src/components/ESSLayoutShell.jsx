@@ -1,9 +1,9 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, API_BASE_URL } from '../context/AuthContext';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
-import { Home, Clock, FileText, Calendar, User, LogOut } from 'lucide-react';
+import { Home, Clock, FileText, Calendar, User, LogOut, MapPin, Bell } from 'lucide-react';
 
 export default function ESSLayoutShell({ children }) {
   const { user, logout } = useAuth();
@@ -22,17 +22,28 @@ export default function ESSLayoutShell({ children }) {
     return false;
   };
 
+  const locationName = user?.employee?.work_location_name || 'Main Office Geofence';
+
   return (
     <div className="ess-layout-container">
       {/* Mobile Top Header */}
-      <header className="ess-mobile-header">
+      <header className="ess-mobile-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', height: '56px', position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <img src="/logo.jpeg" alt="C-Hub Logo" style={{ width: '32px', height: '32px', borderRadius: '6px', border: '1px solid var(--chub-pink)' }} />
-          <span style={{ fontWeight: 700, fontSize: '16px', color: 'var(--chub-purple)', letterSpacing: '0.5px' }}>C-HUB ESS</span>
+          <div style={{ backgroundColor: 'rgba(255,255,255,0.2)', padding: '6px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF' }}>
+            <MapPin size={16} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left' }}>
+            <span style={{ fontSize: '10px', color: 'rgba(255, 255, 255, 0.8)', fontWeight: '600', textTransform: 'uppercase' }}>Location</span>
+            <span style={{ fontSize: '12px', color: '#FFFFFF', fontWeight: 'bold' }}>{locationName}</span>
+          </div>
         </div>
-        <button onClick={handleLogout} className="ess-mobile-logout-btn" title="Logout">
-          <LogOut size={18} />
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {/* Notification bell mock */}
+          <div style={{ position: 'relative', width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', cursor: 'pointer' }}>
+            <Bell size={16} />
+            <span style={{ position: 'absolute', top: '2px', right: '2px', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#EF4444', border: '2px solid #2E62F6' }} />
+          </div>
+        </div>
       </header>
 
       {/* Main Core Container (combines sidebar + main content for desktop) */}
@@ -52,9 +63,8 @@ export default function ESSLayoutShell({ children }) {
       <nav className="ess-mobile-bottom-nav">
         {[
           { label: 'Home', icon: Home, path: '/' },
-          { label: 'Clock', icon: Clock, path: '/ess/clock' },
-          { label: 'Leaves', icon: FileText, path: '/ess/leaves' },
-          { label: 'Logs', icon: Calendar, path: '/ess/performance' },
+          { label: 'Attendance', icon: Clock, path: '/ess/clock' },
+          { label: 'Reports', icon: FileText, path: '/ess/performance' },
           { label: 'Profile', icon: User, path: '/ess/profile' }
         ].map((tab) => {
           const Icon = tab.icon;

@@ -7,7 +7,7 @@ export default function ESSPerformance() {
   
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [currentDate, setCurrentDate] = useState(new Date()); // Used to toggle month
+  const [currentDate, setCurrentDate] = useState(new Date());
 
   // Performance metrics summary
   const [summary, setSummary] = useState({
@@ -22,8 +22,8 @@ export default function ESSPerformance() {
     try {
       setLoading(true);
       const data = await request('/attendance/my-logs');
-      setLogs(data);
-      calculateSummary(data);
+      setLogs(data || []);
+      calculateSummary(data || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -32,7 +32,6 @@ export default function ESSPerformance() {
   };
 
   const calculateSummary = (allLogs) => {
-    // CurrentDate is a state representing the current selected calendar month
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
 
@@ -73,7 +72,7 @@ export default function ESSPerformance() {
   };
 
   const getFirstDayOfMonth = (year, month) => {
-    return new Date(year, month, 1).getDay(); // 0 = Sun, 1 = Mon
+    return new Date(year, month, 1).getDay();
   };
 
   const handlePrevMonth = () => {
@@ -84,18 +83,15 @@ export default function ESSPerformance() {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
   };
 
-  // Build Calendar grid
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const totalDays = getDaysInMonth(year, month);
-  const firstDayIndex = getFirstDayOfMonth(year, month); // Day offset
+  const firstDayIndex = getFirstDayOfMonth(year, month);
 
   const daysGrid = [];
-  // Empty blocks for offset
   for (let i = 0; i < firstDayIndex; i++) {
     daysGrid.push(null);
   }
-  // Month days
   for (let i = 1; i <= totalDays; i++) {
     daysGrid.push(i);
   }
@@ -114,38 +110,55 @@ export default function ESSPerformance() {
 
   // Color mapper for calendar day
   const getDayStyles = (log) => {
-    if (!log) return { bg: 'var(--bg-primary)', color: 'var(--text-main)' };
+    if (!log) return { bg: '#F8FAFC', color: '#1A1D20' };
     
     switch (log.status) {
       case 'Present':
-        return { bg: 'rgba(34, 197, 94, 0.12)', color: 'var(--color-success)', border: '1px solid var(--color-success)' };
+        return { bg: '#EBFDF4', color: '#047857', border: '1px solid rgba(16, 185, 129, 0.2)' };
       case 'Late':
-        return { bg: 'rgba(245, 158, 11, 0.12)', color: 'var(--color-warning)', border: '1px solid var(--color-warning)' };
+        return { bg: '#FFFBEB', color: '#B45309', border: '1px solid rgba(245, 158, 11, 0.2)' };
       case 'Half Day':
-        return { bg: 'rgba(245, 158, 11, 0.18)', color: '#d97706', border: '1px solid #d97706' };
+        return { bg: '#FEF3C7', color: '#D97706', border: '1px solid rgba(217, 119, 6, 0.2)' };
       case 'Leave':
-        return { bg: 'rgba(216, 90, 166, 0.12)', color: 'var(--chub-pink)', border: '1px solid var(--chub-pink)' };
+        return { bg: '#EFF6FF', color: '#2E62F6', border: '1px solid rgba(46, 98, 246, 0.2)' };
       case 'Location Not Verified':
-        return { bg: 'rgba(239, 68, 68, 0.12)', color: 'var(--color-error)', border: '1px solid var(--color-error)' };
+        return { bg: '#FEF2F2', color: '#EF4444', border: '1px solid rgba(239, 68, 68, 0.2)' };
       default:
-        return { bg: 'var(--bg-primary)', color: 'var(--text-main)' };
+        return { bg: '#F8FAFC', color: '#1A1D20' };
     }
   };
+
+  // Get list of filtered logs for this month (ordered chronologically)
+  const thisMonthLogs = logs.filter(log => {
+    const d = new Date(log.date);
+    const istYear = parseInt(d.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', year: 'numeric' }), 10);
+    const istMonth = parseInt(d.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', month: 'numeric' }), 10) - 1;
+    return istYear === year && istMonth === month;
+  }).sort((a, b) => new Date(b.date) - new Date(a.date)); // Latest first
 
   const handlePrintReport = () => {
     window.print();
   };
 
+  if (loading && logs.length === 0) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
+        <p>Loading performance metrics...</p>
+      </div>
+    );
+  }
+
   return (
-    <div>
+    <div style={{ padding: '0px' }}>
+      
       {/* Header and PDF Print Actions */}
-      <div className="flex-between m-b-20 no-print">
+      <div className="flex-between m-b-20 no-print" style={{ marginBottom: '20px' }}>
         <div>
-          <h2 style={{ fontSize: '28px', color: 'var(--chub-purple)' }}>Performance & Logs</h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Review monthly attendance calendars, working hours, and export personal PDF reports.</p>
+          <h2 style={{ fontSize: '18px', fontWeight: '700', color: '#1A1D20', margin: '0 0 4px 0' }}>Performance & Logs</h2>
+          <p style={{ color: '#6B7280', fontSize: '12px', margin: 0 }}>Review monthly attendance calendars, active hours, and print sheets.</p>
         </div>
-        <button onClick={handlePrintReport} className="btn btn-primary">
-          <Printer size={16} /> Print Monthly Sheet
+        <button onClick={handlePrintReport} className="btn btn-primary" style={{ height: '36px', padding: '6px 14px', borderRadius: '20px', fontSize: '11px' }}>
+          <Printer size={14} /> Print Sheet
         </button>
       </div>
 
@@ -153,68 +166,65 @@ export default function ESSPerformance() {
       <div className="printable-report-sheet">
         
         {/* Brand header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '2px solid var(--chub-purple)', paddingBottom: '16px', marginBottom: '24px' }}>
-          <img src="/logo.jpeg" alt="C-Hub" style={{ width: '50px', height: '50px', borderRadius: '8px' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '2px solid #2E62F6', paddingBottom: '12px', marginBottom: '20px' }}>
+          <img src="/logo.jpeg" alt="C-Hub" style={{ width: '40px', height: '40px', borderRadius: '8px' }} />
           <div>
-            <h3 style={{ fontSize: '20px', color: 'var(--chub-purple)', margin: 0 }}>C-Hub Internal operations</h3>
-            <span style={{ fontSize: '11px', color: 'var(--chub-pink)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Creating Wow World</span>
+            <h3 style={{ fontSize: '16px', color: '#2E62F6', margin: 0 }}>C-Hub Internal operations</h3>
+            <span style={{ fontSize: '10px', color: '#6B7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Creating Wow World</span>
           </div>
-          <div style={{ marginLeft: 'auto', textAlign: 'right', fontSize: '12px' }}>
+          <div style={{ marginLeft: 'auto', textAlign: 'right', fontSize: '11px' }}>
             <div><strong>Employee:</strong> {user?.email}</div>
             <div><strong>Month:</strong> {monthName} {year}</div>
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Printed in IST Zone</div>
+            <div style={{ fontSize: '9px', color: '#6B7280' }}>Printed in IST Zone</div>
           </div>
         </div>
 
         {/* Metrics Grid */}
-        <div className="grid-cols-4 m-b-20">
-          <div className="card" style={{ padding: '16px', borderLeft: '4px solid var(--color-success)' }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>DAYS PRESENT</span>
-            <h4 style={{ fontSize: '24px', margin: 0 }}>{summary.present} Days</h4>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
+          <div className="card" style={{ padding: '12px !important', borderLeft: '4px solid #10B981', borderTop: 'none', borderRight: 'none', borderBottom: 'none', borderRadius: '8px' }}>
+            <span style={{ fontSize: '9px', color: '#6B7280', fontWeight: 600, textTransform: 'uppercase' }}>Days Present</span>
+            <h4 style={{ fontSize: '18px', margin: '4px 0 0 0', fontWeight: 'bold' }}>{summary.present} Days</h4>
           </div>
-          <div className="card" style={{ padding: '16px', borderLeft: '4px solid var(--color-warning)' }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>LATE ARRIVALS</span>
-            <h4 style={{ fontSize: '24px', margin: 0 }}>{summary.late}</h4>
+          <div className="card" style={{ padding: '12px !important', borderLeft: '4px solid #F59E0B', borderTop: 'none', borderRight: 'none', borderBottom: 'none', borderRadius: '8px' }}>
+            <span style={{ fontSize: '9px', color: '#6B7280', fontWeight: 600, textTransform: 'uppercase' }}>Late Arrivals</span>
+            <h4 style={{ fontSize: '18px', margin: '4px 0 0 0', fontWeight: 'bold' }}>{summary.late} Days</h4>
           </div>
-          <div className="card" style={{ padding: '16px', borderLeft: '4px solid var(--chub-pink)' }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>AVAILED LEAVES</span>
-            <h4 style={{ fontSize: '24px', margin: 0 }}>{summary.leave}</h4>
+          <div className="card" style={{ padding: '12px !important', borderLeft: '4px solid #2E62F6', borderTop: 'none', borderRight: 'none', borderBottom: 'none', borderRadius: '8px' }}>
+            <span style={{ fontSize: '9px', color: '#6B7280', fontWeight: 600, textTransform: 'uppercase' }}>Leaves Taken</span>
+            <h4 style={{ fontSize: '18px', margin: '4px 0 0 0', fontWeight: 'bold' }}>{summary.leave} Days</h4>
           </div>
-          <div className="card" style={{ padding: '16px', borderLeft: '4px solid var(--chub-purple)' }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>TOTAL ACTIVE HOURS</span>
-            <h4 style={{ fontSize: '24px', margin: 0 }}>{summary.hours} hrs</h4>
+          <div className="card" style={{ padding: '12px !important', borderLeft: '4px solid #4B5563', borderTop: 'none', borderRight: 'none', borderBottom: 'none', borderRadius: '8px' }}>
+            <span style={{ fontSize: '9px', color: '#6B7280', fontWeight: 600, textTransform: 'uppercase' }}>Active Hours</span>
+            <h4 style={{ fontSize: '18px', margin: '4px 0 0 0', fontWeight: 'bold' }}>{summary.hours} hrs</h4>
           </div>
         </div>
 
-        {/* Calendar and legends layout */}
-        <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+        {/* Calendar and logs layout */}
+        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
           
           {/* Calendar Box */}
-          <div className="card" style={{ flex: 1.8, minWidth: '320px' }}>
-            <div className="flex-between no-print" style={{ marginBottom: '20px' }}>
-              <button onClick={handlePrevMonth} className="btn btn-secondary" style={{ padding: '6px 12px' }}>
-                <ChevronLeft size={16} /> Prev
+          <div className="card" style={{ flex: 1.5, minWidth: '320px' }}>
+            <div className="flex-between no-print" style={{ marginBottom: '16px' }}>
+              <button onClick={handlePrevMonth} className="btn" style={{ padding: '4px 10px', fontSize: '10px', backgroundColor: '#EEF2F6', border: 'none', color: '#2E62F6', borderRadius: '4px' }}>
+                <ChevronLeft size={14} /> Prev
               </button>
-              <h3 style={{ fontSize: '18px', margin: 0 }}>{monthName} {year}</h3>
-              <button onClick={handleNextMonth} className="btn btn-secondary" style={{ padding: '6px 12px' }}>
-                Next <ChevronRight size={16} />
+              <h3 style={{ fontSize: '14px', margin: 0, fontWeight: '700' }}>{monthName} {year}</h3>
+              <button onClick={handleNextMonth} className="btn" style={{ padding: '4px 10px', fontSize: '10px', backgroundColor: '#EEF2F6', border: 'none', color: '#2E62F6', borderRadius: '4px' }}>
+                Next <ChevronRight size={14} />
               </button>
             </div>
             
-            {/* Calendar header shown on print */}
-            <div className="print-only" style={{ display: 'none', textAlign: 'center', marginBottom: '16px' }}>
-              <h3 style={{ fontSize: '18px', margin: 0 }}>{monthName} {year} Attendance Calendar</h3>
+            <div className="print-only" style={{ display: 'none', textAlign: 'center', marginBottom: '12px' }}>
+              <h3 style={{ fontSize: '14px', margin: 0 }}>{monthName} {year} Attendance Calendar</h3>
             </div>
 
             {/* Calendar grid */}
             <div>
-              {/* Day names */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px', textAlign: 'center', fontWeight: 'bold', fontSize: '12px', marginBottom: '8px', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px', textAlign: 'center', fontWeight: 'bold', fontSize: '11px', marginBottom: '6px', color: '#6B7280' }}>
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <span key={d}>{d}</span>)}
               </div>
 
-              {/* Grid content */}
-              <div className="ess-calendar-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px', minHeight: '260px' }}>
+              <div className="ess-calendar-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px', minHeight: '220px' }}>
                 {daysGrid.map((day, idx) => {
                   const log = getDayLog(day);
                   const styles = getDayStyles(log);
@@ -226,21 +236,20 @@ export default function ESSPerformance() {
                       style={{
                         backgroundColor: styles.bg,
                         color: styles.color,
-                        border: styles.border || '1px solid var(--border-color)',
-                        borderRadius: '8px',
-                        padding: '8px',
+                        border: styles.border || '1px solid #E5E7EB',
+                        borderRadius: '6px',
+                        padding: '6px',
                         display: 'flex',
                         flexDirection: 'column',
                         justifyContent: 'space-between',
-                        minHeight: '56px',
-                        transition: 'all 0.2s'
+                        minHeight: '48px'
                       }}
                     >
                       {day ? (
                         <>
-                          <span style={{ fontSize: '12px', fontWeight: 'bold' }}>{day}</span>
+                          <span style={{ fontSize: '11px', fontWeight: 'bold' }}>{day}</span>
                           {log && (
-                            <span className="calendar-day-status" style={{ fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', display: 'block', textAlign: 'right' }}>
+                            <span className="calendar-day-status" style={{ fontSize: '8px', fontWeight: '700', textTransform: 'uppercase', display: 'block', textAlign: 'right' }}>
                               {log.status === 'Location Not Verified' ? 'No GPS' : log.status}
                             </span>
                           )}
@@ -250,48 +259,81 @@ export default function ESSPerformance() {
                   );
                 })}
               </div>
-
             </div>
+
+            {/* Legends inside/below the calendar */}
+            <div style={{ marginTop: '16px', borderTop: '1px solid #F1F5F9', paddingTop: '12px' }}>
+              <h4 style={{ fontSize: '11px', fontWeight: 'bold', color: '#1A1D20', marginBottom: '8px' }}>Legends</h4>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 16px', fontSize: '10px', color: '#4B5563' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#EBFDF4', border: '1px solid rgba(16, 185, 129, 0.2)' }} />
+                  <span>Present</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#FFFBEB', border: '1px solid rgba(245, 158, 11, 0.2)' }} />
+                  <span>Late Arrival</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#FEF3C7', border: '1px solid rgba(217, 119, 6, 0.2)' }} />
+                  <span>Half Day</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#EFF6FF', border: '1px solid rgba(46, 98, 246, 0.2)' }} />
+                  <span>Leave</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#FEF2F2', border: '1px solid rgba(239, 68, 68, 0.2)' }} />
+                  <span>No GPS Verification</span>
+                </div>
+              </div>
+            </div>
+
           </div>
 
-          {/* Legends Column */}
-          <div className="card" style={{ flex: 1, minWidth: '240px' }}>
-            <h3 style={{ fontSize: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', marginBottom: '16px' }}>
-              Attendance Legends
+          {/* Chronological logs list */}
+          <div className="card" style={{ flex: 1.2, minWidth: '300px', display: 'flex', flexDirection: 'column' }}>
+            <h3 style={{ fontSize: '14px', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '12px', color: '#1A1D20', fontWeight: '700' }}>
+              Attendance Details Log
             </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ width: '16px', height: '16px', borderRadius: '4px', backgroundColor: 'rgba(34, 197, 94, 0.12)', border: '1px solid var(--color-success)' }} />
-                <span><strong>Present:</strong> Valid check-in inside office geofence</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ width: '16px', height: '16px', borderRadius: '4px', backgroundColor: 'rgba(245, 158, 11, 0.12)', border: '1px solid var(--color-warning)' }} />
-                <span><strong>Late Arrival:</strong> Clocked in after shift grace period</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ width: '16px', height: '16px', borderRadius: '4px', backgroundColor: 'rgba(245, 158, 11, 0.18)', border: '1px solid #d97706' }} />
-                <span><strong>Half Day:</strong> Worked hours under 4.0 hours</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ width: '16px', height: '16px', borderRadius: '4px', backgroundColor: 'rgba(216, 90, 166, 0.12)', border: '1px solid var(--chub-pink)' }} />
-                <span><strong>Approved Leave:</strong> Approved day off</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ width: '16px', height: '16px', borderRadius: '4px', backgroundColor: 'rgba(239, 68, 68, 0.12)', border: '1px solid var(--color-error)' }} />
-                <span><strong>Location Not Verified:</strong> GPS denied / outside radius</span>
-              </div>
-            </div>
             
-            <div style={{ marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '16px', fontSize: '11px', color: 'var(--text-muted)' }}>
-              * Monthly logs calculated using IST timezone standard. Report generates directly from C-Hub database registries.
-            </div>
+            {thisMonthLogs.length === 0 ? (
+              <p style={{ textAlign: 'center', padding: '40px 10px', color: '#6B7280', fontSize: '12px', margin: 0 }}>No logs recorded for this month.</p>
+            ) : (
+              <div style={{ maxHeight: '360px', overflowY: 'auto', paddingRight: '4px' }}>
+                {thisMonthLogs.map((log, idx) => (
+                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #F1F5F9', fontSize: '11px' }}>
+                    <div>
+                      <strong style={{ display: 'block', color: '#1A1D20', fontSize: '12px' }}>
+                        {new Date(log.date).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', weekday: 'short' })}
+                      </strong>
+                      <span style={{ color: '#6B7280', fontSize: '11px' }}>
+                        In: {log.clock_in_time || '--:--'} | Out: {log.clock_out_time || '--:--'}
+                      </span>
+                    </div>
+                    <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '11px', color: '#4B5563', fontWeight: 'bold' }}>
+                        {log.total_hours ? `${log.total_hours} hrs` : '--'}
+                      </span>
+                      <span className={`badge ${
+                        log.status === 'Present' ? 'badge-active' :
+                        log.status === 'Late' ? 'badge-pending' :
+                        log.status === 'Half Day' ? 'badge-pending' :
+                        log.status === 'Leave' ? 'badge-active' : 'badge-rejected'
+                      }`} style={{ fontSize: '9px', padding: '2px 8px' }}>
+                        {log.status === 'Location Not Verified' ? 'No GPS' : log.status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
         </div>
 
         {/* Print Footer */}
-        <div className="print-only" style={{ display: 'none', borderTop: '1px solid var(--border-color)', padding: '20px 0', marginTop: '40px', fontSize: '11px', color: 'var(--text-muted)', justifyContent: 'space-between' }}>
-          <span>Generated from C-Hub HR Admin Panel</span>
+        <div className="print-only" style={{ display: 'none', borderTop: '1px solid #E5E7EB', padding: '16px 0', marginTop: '30px', fontSize: '10px', color: '#6B7280', justifyContent: 'space-between' }}>
+          <span>Generated from C-Hub ESS Panel</span>
           <span>Branding: Creating Wow World</span>
         </div>
 

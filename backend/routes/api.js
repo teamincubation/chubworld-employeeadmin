@@ -278,7 +278,8 @@ router.get('/documents/download/:filename', authenticateToken, async (req, res) 
   }
 });
 
-// Self-photo update endpoint removed
+// Self-photo update endpoint
+router.post('/ess/profile/photo', authenticateToken, handleUpload('photo'), employeeController.uploadSelfPhoto);
 
 // Admin Controller management routes
 router.get('/security/admin-controller', authenticateToken, securityController.getAdminController);

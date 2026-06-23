@@ -1,17 +1,28 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Clock, MapPin, CheckCircle, ShieldAlert, Navigation, Calendar } from 'lucide-react';
+import { Clock, MapPin, CheckCircle, ShieldAlert, Navigation, Calendar, ArrowLeft, Plus } from 'lucide-react';
 
 export default function ESSClockIn() {
   const { request } = useAuth();
+  const navigate = useNavigate();
   
   // Status state
-  const [status, setStatus] = useState('not_clocked_in'); // 'not_clocked_in', 'clocked_in', 'clocked_out', 'holiday'
+  const [status, setStatus] = useState('not_clocked_in'); 
   const [record, setRecord] = useState(null);
   const [shift, setShift] = useState(null);
   const [holidayName, setHolidayName] = useState('');
   const [loading, setLoading] = useState(true);
   const [warningNotification, setWarningNotification] = useState(false);
+
+  // Live IST Clock
+  const [timeStr, setTimeStr] = useState('');
+  const [dateStr, setDateStr] = useState('');
+
+  // GPS coordinates
+  const [coords, setCoords] = useState(null);
+  const [gpsError, setGpsError] = useState('');
+  const [fetchingGps, setFetchingGps] = useState(false);
 
   const triggerWebNotification = () => {
     if (window.Notification) {
@@ -35,25 +46,14 @@ export default function ESSClockIn() {
     }
   };
 
-  // Live IST Clock
-  const [timeStr, setTimeStr] = useState('');
-  const [dateStr, setDateStr] = useState('');
-
-  // GPS coordinates
-  const [coords, setCoords] = useState(null);
-  const [gpsError, setGpsError] = useState('');
-  const [fetchingGps, setFetchingGps] = useState(false);
-
   useEffect(() => {
     fetchStatus();
     acquireGPS();
     
-    // Request Notification permission on mount
     if (window.Notification && Notification.permission === 'default') {
       Notification.requestPermission();
     }
     
-    // Live Clock interval
     const updateTime = () => {
       const now = new Date();
       const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
@@ -90,7 +90,7 @@ export default function ESSClockIn() {
 
   const acquireGPS = () => {
     if (!navigator.geolocation) {
-      return setGpsError('Browser does not support Geolocation API.');
+      return setGpsError('Browser does not support Geolocation.');
     }
 
     setFetchingGps(true);
@@ -107,7 +107,7 @@ export default function ESSClockIn() {
       },
       (err) => {
         console.warn(err);
-        setGpsError('GPS permission denied. Mark as Location Not Verified.');
+        setGpsError('GPS permission denied.');
         setFetchingGps(false);
       },
       { enableHighAccuracy: true, timeout: 10000 }
@@ -161,167 +161,209 @@ export default function ESSClockIn() {
   };
 
   return (
-    <div style={{ maxWidth: '650px', margin: '0 auto' }}>
-      {/* Time display card */}
-      <div className="card m-b-20" style={{
-        background: 'linear-gradient(135deg, #42174F 0%, #D85AA6 100%)',
-        color: '#FFFFFF',
-        border: 'none',
-        textAlign: 'center',
-        padding: '40px 20px'
-      }}>
-        <span style={{ fontSize: '13px', fontWeight: 600, opacity: 0.8, letterSpacing: '1px', textTransform: 'uppercase' }}>
-          Real-Time IST System Clock
-        </span>
-        <h1 style={{ fontSize: '56px', color: '#FFFFFF', fontFamily: 'Poppins', margin: '12px 0', letterSpacing: '1px' }}>
-          {timeStr || '00:00:00 AM'}
-        </h1>
-        <p style={{ opacity: 0.9, fontSize: '16px', fontWeight: 500 }}>{dateStr}</p>
+    <div style={{ maxWidth: '600px', margin: '0 auto', padding: '0px' }}>
+      
+      {/* Header section with back button and plus button */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+        <button 
+          onClick={() => navigate('/')} 
+          style={{ background: 'none', border: 'none', color: '#1A1D20', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '600' }}
+        >
+          <ArrowLeft size={16} /> Back
+        </button>
+        <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#1A1D20', margin: 0 }}>Shift Details</h2>
+        <button 
+          onClick={() => alert("Quick notes or correction submissions can be added here.")} 
+          style={{ background: '#EEF2F6', border: 'none', color: '#2E62F6', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyCenter: 'center', justifyContent: 'center' }}
+        >
+          <Plus size={16} />
+        </button>
       </div>
 
-      {/* 8+ Hours Urgent Warning Alert Banner */}
+      {/* Live System Time */}
+      <div className="card m-b-20" style={{
+        background: '#FFFFFF',
+        textAlign: 'center',
+        padding: '24px 20px',
+        border: '1px solid #E5E7EB',
+        borderRadius: '16px',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
+        marginBottom: '20px'
+      }}>
+        <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', color: '#2E62F6' }}>
+          Real-Time IST System Clock
+        </span>
+        <h1 style={{ fontSize: '32px', color: '#1A1D20', fontFamily: 'Outfit', fontWeight: 'bold', margin: '6px 0 2px 0' }}>
+          {timeStr || '00:00:00 AM'}
+        </h1>
+        <p style={{ color: '#6B7280', fontSize: '11px', margin: 0 }}>{dateStr}</p>
+      </div>
+
+      {/* Warning alert banner */}
       {warningNotification && (
         <div className="card m-b-20" style={{
-          background: 'linear-gradient(135deg, #7f1d1d 0%, #b91c1c 100%)',
+          background: 'linear-gradient(135deg, #7F1D1D 0%, #EF4444 100%)',
           color: '#FFFFFF',
-          border: '1px solid rgba(248, 113, 113, 0.4)',
+          border: 'none',
           borderRadius: '12px',
-          padding: '16px',
-          animation: 'pulse 2s infinite',
-          boxShadow: '0 8px 32px 0 rgba(239, 68, 68, 0.2)',
+          padding: '12px 16px',
+          marginBottom: '20px',
           display: 'flex',
           alignItems: 'center',
-          gap: '12px'
+          gap: '10px'
         }}>
-          <ShieldAlert size={20} style={{ color: '#fca5a5', flexShrink: 0 }} />
-          <span style={{ fontSize: '13px', color: '#fca5a5', lineHeight: '1.4' }}>
-            <strong>Urgent Warning:</strong> You have been clocked in for over 8 hours. Please click **Clock Out** below if you have finished your work today.
+          <ShieldAlert size={18} style={{ color: '#FFFFFF', flexShrink: 0 }} />
+          <span style={{ fontSize: '11px', color: '#FFFFFF', lineHeight: '1.4' }}>
+            <strong>Warning:</strong> Active session exceeds 8 hours. Please check out.
           </span>
         </div>
       )}
 
-      {/* Main clock actions */}
-      <div className="card m-b-20" style={{ textAlign: 'center', padding: '30px' }}>
-        <h3 style={{ fontSize: '18px', marginBottom: '16px' }}>Attendance Action Center</h3>
+      {/* Action Center card */}
+      <div className="card m-b-20" style={{ textAlign: 'center', padding: '24px', marginBottom: '20px' }}>
+        <h3 style={{ fontSize: '13px', fontWeight: '600', marginBottom: '16px', color: '#4B5563' }}>Attendance Actions</h3>
 
-        {/* Big Action buttons */}
-        <div style={{ marginBottom: '24px' }}>
+        <div style={{ marginBottom: '20px' }}>
           {status === 'not_clocked_in' && (
-            <button 
-              onClick={handleClockIn} 
-              className="btn btn-primary"
-              style={{
-                width: '180px', height: '180px', borderRadius: '50%',
-                fontSize: '22px', fontFamily: 'Poppins', display: 'inline-flex',
-                flexDirection: 'column', gap: '8px', boxShadow: '0 10px 25px rgba(216, 90, 166, 0.4)'
-              }}
-              disabled={loading || fetchingGps}
-            >
-              <Navigation size={28} /> Clock In
-            </button>
+            <div>
+              <button 
+                onClick={handleClockIn} 
+                className="btn btn-primary"
+                style={{ width: '140px', height: '140px', borderRadius: '50%', fontSize: '16px', display: 'inline-flex', flexDirection: 'column', gap: '6px', justifyContent: 'center', alignItems: 'center' }}
+                disabled={loading || fetchingGps}
+              >
+                <Navigation size={22} style={{ transform: 'rotate(45deg)' }} /> Clock In
+              </button>
+              <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '12px' }}>Click to register your shift start.</p>
+            </div>
           )}
 
           {status === 'clocked_in' && (
-            <button 
-              onClick={handleClockOut} 
-              className="btn"
-              style={{
-                width: '180px', height: '180px', borderRadius: '50%',
-                fontSize: '22px', fontFamily: 'Poppins', display: 'inline-flex',
-                flexDirection: 'column', gap: '8px', background: 'linear-gradient(135deg, #F15BC4 0%, #D85AA6 100%)',
-                color: '#FFFFFF', boxShadow: '0 10px 25px rgba(241, 91, 196, 0.4)'
-              }}
-              disabled={loading || fetchingGps}
-            >
-              <Navigation size={28} style={{ transform: 'rotate(180deg)' }} /> Clock Out
-            </button>
+            <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
+              <button 
+                onClick={() => alert("Tea/Lunch Break toggled.")} 
+                className="btn btn-secondary"
+                style={{ width: '130px', height: '130px', borderRadius: '50%', fontSize: '15px', display: 'inline-flex', flexDirection: 'column', gap: '6px', justifyContent: 'center', alignItems: 'center' }}
+                disabled={loading}
+              >
+                Break
+              </button>
+              <button 
+                onClick={handleClockOut} 
+                className="btn btn-danger"
+                style={{ width: '130px', height: '130px', borderRadius: '50%', fontSize: '15px', display: 'inline-flex', flexDirection: 'column', gap: '6px', justifyContent: 'center', alignItems: 'center', backgroundColor: '#EF4444', border: 'none' }}
+                disabled={loading || fetchingGps}
+              >
+                Check Out
+              </button>
+            </div>
           )}
 
           {status === 'clocked_out' && (
             <div style={{
-              width: '180px', height: '180px', borderRadius: '50%',
-              backgroundColor: 'var(--chub-light-lavender)', color: 'var(--chub-purple)',
+              width: '130px', height: '130px', borderRadius: '50%',
+              backgroundColor: '#EFF6FF', color: '#2E62F6',
               display: 'inline-flex', flexDirection: 'column', alignItems: 'center',
-              justifyContent: 'center', gap: '8px', border: '3px dashed var(--chub-purple)'
+              justifyContent: 'center', gap: '6px', border: '2px dashed #2E62F6', margin: '0 auto'
             }}>
-              <CheckCircle size={36} />
-              <span style={{ fontSize: '18px', fontFamily: 'Poppins', fontWeight: 'bold' }}>COMPLETED</span>
+              <CheckCircle size={28} />
+              <span style={{ fontSize: '14px', fontWeight: 'bold' }}>COMPLETED</span>
             </div>
           )}
 
           {status === 'holiday' && (
             <div style={{
-              width: '180px', height: '180px', borderRadius: '50%',
-              backgroundColor: 'rgba(216, 90, 166, 0.1)', color: 'var(--chub-pink)',
+              width: '130px', height: '130px', borderRadius: '50%',
+              backgroundColor: '#FEF3C7', color: '#D97706',
               display: 'inline-flex', flexDirection: 'column', alignItems: 'center',
-              justifyContent: 'center', gap: '8px', border: '3px dashed var(--chub-pink)',
+              justifyContent: 'center', gap: '6px', border: '2px dashed #D97706',
               margin: '0 auto'
             }}>
-              <Calendar size={36} />
-              <span style={{ fontSize: '18px', fontFamily: 'Poppins', fontWeight: 'bold' }}>HOLIDAY</span>
+              <Calendar size={28} />
+              <span style={{ fontSize: '14px', fontWeight: 'bold' }}>HOLIDAY</span>
             </div>
           )}
         </div>
 
         {status === 'holiday' && (
-          <div className="alert alert-info" style={{ marginTop: '16px', justifyContent: 'center' }}>
-            <Calendar size={18} />
-            <span>Today is a scheduled paid leave holiday: <strong>{holidayName}</strong>. Self clock-in is disabled.</span>
+          <div style={{ margin: '12px 0', fontSize: '11px', color: '#B45309', backgroundColor: '#FFFBEB', padding: '8px 12px', borderRadius: '8px' }}>
+            Today is a scheduled holiday: <strong>{holidayName}</strong>. Clocking is disabled.
           </div>
         )}
 
         {/* GPS location diagnostics */}
         <div style={{
-          backgroundColor: 'var(--bg-primary)', padding: '16px',
-          borderRadius: '12px', border: '1px solid var(--border-color)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', flexWrap: 'wrap'
+          backgroundColor: '#F8FAFC', padding: '12px',
+          borderRadius: '10px', border: '1px solid #E5E7EB',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', fontSize: '11px'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
-            <MapPin size={16} style={{ color: coords ? 'var(--color-success)' : 'var(--color-warning)' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <MapPin size={14} style={{ color: coords ? '#10B981' : '#F59E0B' }} />
             {fetchingGps ? (
-              <span>Locating satellite...</span>
+              <span>Locating Satellite...</span>
             ) : coords ? (
-              <span>
-                <strong>GPS Status:</strong> Lat {coords.latitude.toFixed(4)}, Lon {coords.longitude.toFixed(4)} (±{Math.round(coords.accuracy)}m)
-              </span>
+              <span>GPS verified: {coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}</span>
             ) : (
-              <span style={{ color: 'var(--color-warning)' }}>Location not shared (Bypass Mode activated)</span>
+              <span>Bypass Mode Activated</span>
             )}
           </div>
-          <button onClick={acquireGPS} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }} disabled={fetchingGps}>
+          <button onClick={acquireGPS} className="btn" style={{ padding: '3px 8px', fontSize: '10px', backgroundColor: '#EEF2F6', color: '#2E62F6', border: 'none', borderRadius: '4px' }} disabled={fetchingGps}>
             Refresh GPS
           </button>
         </div>
-
-        <small style={{ display: 'block', marginTop: '16px', color: 'var(--text-muted)' }}>
-          * Attendance coordinates are verified against your assigned worksite. 
-          Make sure location permissions are enabled.
-        </small>
       </div>
 
-      {/* Shift details card */}
-      <div className="card">
-        <h3 style={{ fontSize: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', marginBottom: '16px' }}>
-          Assigned Shift Information
+      {/* Timeline Schedule Layout at the bottom */}
+      <div className="card" style={{ padding: '24px' }}>
+        <h3 style={{ fontSize: '14px', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '16px', color: '#1A1D20' }}>
+          Shift Timeline Schedule
         </h3>
-        {shift ? (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontSize: '14px' }}>
-            <div><strong>Active Shift:</strong> <p>{shift.name}</p></div>
-            <div><strong>Allowed Hours:</strong> <p>{shift.start_time} to {shift.end_time}</p></div>
-            <div><strong>Grace Allowed:</strong> <p>{shift.grace_period_minutes} Minutes</p></div>
-            {record?.clock_in_time && (
-              <div><strong>Clocked In Today:</strong> <p>{record.clock_in_time} IST ({record.status})</p></div>
-            )}
+        
+        <div className="ess-schedule-timeline">
+          
+          <div className="ess-schedule-item">
+            <div>
+              <strong style={{ display: 'block', fontSize: '12px' }}>Check-In Target</strong>
+              <span style={{ color: '#6B7280', fontSize: '11px' }}>Shift Start Boundary</span>
+            </div>
+            <span className="badge" style={{ backgroundColor: '#EFF6FF', color: '#2E62F6', fontSize: '10px' }}>
+              {shift?.start_time || '09:30 AM'}
+            </span>
           </div>
-        ) : (
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>No shift assignment found. Contact HR Manager.</p>
-        )}
+
+          <div className="ess-schedule-item break">
+            <div>
+              <strong style={{ display: 'block', fontSize: '12px' }}>Tea Break</strong>
+              <span style={{ color: '#6B7280', fontSize: '11px' }}>Short Intermission (15 mins)</span>
+            </div>
+            <span className="badge" style={{ backgroundColor: '#FEF2F2', color: '#EF4444', fontSize: '10px' }}>
+              11:30 AM
+            </span>
+          </div>
+
+          <div className="ess-schedule-item lunch">
+            <div>
+              <strong style={{ display: 'block', fontSize: '12px' }}>Lunch Break</strong>
+              <span style={{ color: '#6B7280', fontSize: '11px' }}>Midday Interval (45 mins)</span>
+            </div>
+            <span className="badge" style={{ backgroundColor: '#FFFBEB', color: '#F59E0B', fontSize: '10px' }}>
+              01:30 PM
+            </span>
+          </div>
+
+          <div className="ess-schedule-item">
+            <div>
+              <strong style={{ display: 'block', fontSize: '12px' }}>Check-Out Target</strong>
+              <span style={{ color: '#6B7280', fontSize: '11px' }}>Shift End Boundary</span>
+            </div>
+            <span className="badge" style={{ backgroundColor: '#ECFDF5', color: '#10B981', fontSize: '10px' }}>
+              {shift?.end_time || '06:30 PM'}
+            </span>
+          </div>
+
+        </div>
       </div>
 
-      <div className="alert alert-info" style={{ marginTop: '20px' }}>
-        <Clock size={18} />
-        <span>Attendance time is recorded using secure server-side IST timestamp.</span>
-      </div>
     </div>
   );
 }

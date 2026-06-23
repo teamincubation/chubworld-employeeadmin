@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, API_BASE_URL } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
-import { Clock, Calendar, ShieldCheck, UserCheck, Milestone, User, Download, Smartphone, ShieldAlert } from 'lucide-react';
+import { Clock, Calendar, ShieldCheck, UserCheck, Milestone, User, Download, Smartphone, ShieldAlert, Navigation, ChevronRight, Bell, MapPin } from 'lucide-react';
 
 export default function ESSDashboard() {
   const { request } = useAuth();
@@ -11,6 +11,17 @@ export default function ESSDashboard() {
   const [attendance, setAttendance] = useState(null);
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [monthlyStats, setMonthlyStats] = useState({ present: 0, absent: 0, late: 0 });
+  const [workMode, setWorkMode] = useState('Office'); // Home vs Office toggle
+
+  // Live IST Clock
+  const [timeStr, setTimeStr] = useState('');
+  const [dateStr, setDateStr] = useState('');
+
+  // GPS coordinates
+  const [coords, setCoords] = useState(null);
+  const [gpsError, setGpsError] = useState('');
+  const [fetchingGps, setFetchingGps] = useState(false);
 
   // PWA & Android Installation Banner State
   const [deferredPrompt, setDeferredPrompt] = useState(null);
@@ -40,11 +51,24 @@ export default function ESSDashboard() {
 
   useEffect(() => {
     fetchDashboardData();
+    acquireGPS();
 
     // Request Notification permission on mount
     if (window.Notification && Notification.permission === 'default') {
       Notification.requestPermission();
     }
+
+    // Live Clock interval
+    const updateTime = () => {
+      const now = new Date();
+      const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+      const ist = new Date(utc + (3600000 * 5.5));
+      setTimeStr(ist.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }));
+      setDateStr(ist.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }));
+    };
+
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
 
     // Check if user is on Android device
     const ua = navigator.userAgent || navigator.vendor || window.opera;
@@ -52,11 +76,8 @@ export default function ESSDashboard() {
     const dismissed = localStorage.getItem('chub_ess_pwa_dismissed');
 
     const handleBeforeInstallPrompt = (e) => {
-      // Prevent the mini-infobar from appearing on mobile
       e.preventDefault();
-      // Stash the event so it can be triggered later.
       setDeferredPrompt(e);
-      // Show the install banner if not dismissed and user is on Android or for debugging/desktop testing
       if (!dismissed) {
         setShowInstallBanner(true);
       }
@@ -64,14 +85,13 @@ export default function ESSDashboard() {
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-    // Fallback: If it is an Android device and not already in standalone mode,
-    // we want to recommend downloading/installing the app even if the beforeinstallprompt hasn't fired yet
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
     if (isAndroidDevice && !isStandalone && !dismissed) {
       setShowInstallBanner(true);
     }
 
     return () => {
+      clearInterval(interval);
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     };
   }, []);
@@ -93,8 +113,107 @@ export default function ESSDashboard() {
       // Fetch leave balances
       const leaveData = await request('/leaves/my-leaves');
       setLeaves(leaveData.balances);
+
+      // Fetch logs for current month stats
+      const logsData = await request('/attendance/my-logs');
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth();
+
+      const thisMonthLogs = logsData.filter(log => {
+        const d = new Date(log.date);
+        const istYear = parseInt(d.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', year: 'numeric' }), 10);
+        const istMonth = parseInt(d.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', month: 'numeric' }), 10) - 1;
+        return istYear === currentYear && istMonth === currentMonth;
+      });
+
+      let presentCount = 0;
+      let absentCount = 0;
+      let lateCount = 0;
+
+      thisMonthLogs.forEach(log => {
+        if (log.status === 'Present') presentCount++;
+        else if (log.status === 'Late') { presentCount++; lateCount++; }
+        else if (log.status === 'Half Day') { presentCount++; }
+        else if (log.status === 'Absent') absentCount++;
+        else if (log.status === 'Location Not Verified') { presentCount++; }
+      });
+
+      setMonthlyStats({ present: presentCount, absent: absentCount, late: lateCount });
     } catch (err) {
       console.error('Error fetching employee dashboard metrics:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const acquireGPS = () => {
+    if (!navigator.geolocation) {
+      return setGpsError('Browser does not support Geolocation.');
+    }
+
+    setFetchingGps(true);
+    setGpsError('');
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setCoords({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          accuracy: pos.coords.accuracy
+        });
+        setFetchingGps(false);
+      },
+      (err) => {
+        console.warn(err);
+        setGpsError('GPS permission denied. Location Not Verified.');
+        setFetchingGps(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const handleClockIn = async () => {
+    try {
+      setLoading(true);
+      const payload = coords ? {
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracy: coords.accuracy
+      } : {};
+
+      const res = await request('/attendance/clock-in', {
+        method: 'POST',
+        body: payload
+      });
+
+      alert(res.message);
+      fetchDashboardData();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClockOut = async () => {
+    try {
+      setLoading(true);
+      const payload = coords ? {
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracy: coords.accuracy
+      } : {};
+
+      const res = await request('/attendance/clock-out', {
+        method: 'POST',
+        body: payload
+      });
+
+      alert(res.message);
+      fetchDashboardData();
+    } catch (err) {
+      alert(err.message);
     } finally {
       setLoading(false);
     }
@@ -117,295 +236,365 @@ export default function ESSDashboard() {
     setShowInstallBanner(false);
   };
 
-  if (loading) {
+  if (loading && !profile) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '85vh' }}>
-        <p>Initializing ESS Dashboard...</p>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
+        <p>Loading your dashboard details...</p>
       </div>
     );
   }
 
   const name = profile?.employee?.full_name || profile?.user?.email?.split('@')[0] || '';
+  const designation = profile?.employee?.designation_name || 'Team Associate';
   const empId = profile?.employee?.employee_id || 'CHUB-EMP';
   const role = profile?.user?.role || 'Employee';
 
   return (
-    <div>
+    <div style={{ padding: '0px' }}>
+      
       {/* Android/Mobile PWA Recommendation Banner */}
       {showInstallBanner && (
         <div className="card m-b-20" style={{
-          background: 'linear-gradient(135deg, #1e1b4b 0%, #311042 100%)',
+          background: 'linear-gradient(135deg, #1E50DD 0%, #2E62F6 100%)',
           color: '#FFFFFF',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
+          border: 'none',
           borderRadius: '16px',
-          padding: '24px',
+          padding: '16px 20px',
           position: 'relative',
           overflow: 'hidden',
-          boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)'
+          marginBottom: '20px'
         }}>
-          {/* Background ambient light */}
-          <div style={{
-            position: 'absolute',
-            top: '-50px',
-            right: '-50px',
-            width: '150px',
-            height: '150px',
-            background: 'rgba(168, 85, 247, 0.3)',
-            filter: 'blur(40px)',
-            borderRadius: '50%',
-            pointerEvents: 'none'
-          }} />
-
           <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
             <div style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+              backgroundColor: 'rgba(255, 255, 255, 0.2)',
               borderRadius: '12px',
-              padding: '12px',
+              padding: '10px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#4ADE80' // Android green
+              color: '#FFFFFF'
             }}>
-              <Smartphone size={32} />
+              <Smartphone size={24} />
             </div>
             <div style={{ flex: 1, paddingRight: '20px' }}>
               <span style={{
-                fontSize: '11px',
+                fontSize: '10px',
                 textTransform: 'uppercase',
                 fontWeight: 700,
-                letterSpacing: '1px',
-                color: '#4ADE80',
+                letterSpacing: '0.5px',
+                color: 'rgba(255, 255, 255, 0.8)',
                 display: 'block',
-                marginBottom: '4px'
+                marginBottom: '2px'
               }}>
-                Android PWA App Available
+                Android Mobile App Available
               </span>
-              <h3 style={{ fontSize: '18px', color: '#FFFFFF', fontWeight: 600, margin: '0 0 8px 0' }}>
+              <h3 style={{ fontSize: '15px', color: '#FFFFFF', fontWeight: 600, margin: '0 0 4px 0' }}>
                 Download C-Hub ESS App
               </h3>
-              <p style={{ fontSize: '13px', color: 'rgba(255, 255, 255, 0.8)', lineHeight: '1.5', margin: '0 0 16px 0' }}>
-                Install the web app to your Android device for a smooth, fast, and native-like check-in & check-out experience every day.
+              <p style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.9)', lineHeight: '1.4', margin: '0 0 12px 0' }}>
+                Install to your home screen for quick, reliable daily clock-ins.
               </p>
-              <div style={{ display: 'flex', gap: '12px' }}>
+              <div style={{ display: 'flex', gap: '10px' }}>
                 <button 
                   onClick={handleInstallClick} 
-                  className="btn btn-primary" 
+                  className="btn" 
                   style={{
-                    backgroundColor: '#22C55E',
-                    borderColor: '#22C55E',
-                    color: '#FFFFFF',
-                    padding: '8px 16px',
-                    fontSize: '13px',
+                    backgroundColor: '#FFFFFF',
+                    color: '#2E62F6',
+                    padding: '6px 14px',
+                    fontSize: '11px',
                     fontWeight: 600,
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}
-                >
-                  <Download size={16} />
-                  Install App
-                </button>
-                <button 
-                  onClick={handleDismissBanner} 
-                  className="btn btn-secondary" 
-                  style={{
-                    backgroundColor: 'transparent',
-                    borderColor: 'rgba(255, 255, 255, 0.2)',
-                    color: 'rgba(255, 255, 255, 0.6)',
-                    padding: '8px 16px',
-                    fontSize: '13px',
-                    borderRadius: '8px',
+                    borderRadius: '20px',
                     cursor: 'pointer'
                   }}
                 >
-                  Maybe Later
+                  Install Now
+                </button>
+                <button 
+                  onClick={handleDismissBanner} 
+                  className="btn" 
+                  style={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    padding: '6px 14px',
+                    fontSize: '11px',
+                    borderRadius: '20px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Dismiss
                 </button>
               </div>
             </div>
           </div>
-          
-          {/* Close close X button */}
-          <button 
-            onClick={handleDismissBanner}
-            style={{
-              position: 'absolute',
-              top: '12px',
-              right: '12px',
-              background: 'none',
-              border: 'none',
-              color: 'rgba(255, 255, 255, 0.4)',
-              cursor: 'pointer',
-              fontSize: '18px',
-              lineHeight: 1,
-              padding: '4px'
-            }}
-            aria-label="Dismiss"
-          >
-            &times;
-          </button>
         </div>
       )}
 
       {/* 8+ Hours Urgent Warning Alert Banner */}
       {attendance?.warningNotification && (
         <div className="card m-b-20" style={{
-          background: 'linear-gradient(135deg, #7f1d1d 0%, #b91c1c 100%)',
+          background: 'linear-gradient(135deg, #7F1D1D 0%, #EF4444 100%)',
           color: '#FFFFFF',
-          border: '1px solid rgba(248, 113, 113, 0.4)',
+          border: 'none',
           borderRadius: '16px',
-          padding: '20px',
-          animation: 'pulse 2s infinite',
-          boxShadow: '0 8px 32px 0 rgba(239, 68, 68, 0.2)'
+          padding: '16px 20px',
+          marginBottom: '20px'
         }}>
           <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
             <div style={{
               backgroundColor: 'rgba(255, 255, 255, 0.2)',
               borderRadius: '50%',
-              padding: '10px',
-              color: '#fca5a5',
+              padding: '8px',
+              color: '#FFFFFF',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0
             }}>
-              <ShieldAlert size={28} />
+              <ShieldAlert size={20} />
             </div>
-            <div style={{ flex: 1, minWidth: '240px' }}>
-              <h4 style={{ margin: '0 0 4px 0', color: '#FFFFFF', fontWeight: 'bold', fontSize: '16px', textTransform: 'none' }}>
+            <div style={{ flex: 1, minWidth: '200px' }}>
+              <h4 style={{ margin: '0 0 2px 0', color: '#FFFFFF', fontWeight: 'bold', fontSize: '14px', textTransform: 'none' }}>
                 Urgent Clock-out Warning
               </h4>
-              <p style={{ margin: 0, fontSize: '13px', color: '#fca5a5', lineHeight: '1.4' }}>
-                You have been clocked in for over 8 hours. Please clock out immediately if you have finished your work to ensure your timesheet is recorded correctly.
+              <p style={{ margin: 0, fontSize: '11px', color: 'rgba(255, 255, 255, 0.9)', lineHeight: '1.4' }}>
+                System indicates active clock-in exceeding 8 hours. Please check out to ensure accurate timesheet tracking.
               </p>
             </div>
-            <Link to="/ess/clock" className="btn" style={{
+            <button onClick={handleClockOut} className="btn" style={{
               backgroundColor: '#FFFFFF',
-              color: '#b91c1c',
+              color: '#EF4444',
               fontWeight: 'bold',
-              padding: '10px 20px',
-              borderRadius: '30px',
-              textDecoration: 'none',
-              fontSize: '13px',
+              padding: '6px 14px',
+              borderRadius: '20px',
+              fontSize: '11px',
               flexShrink: 0
             }}>
-              Clock Out Now
-            </Link>
+              Clock Out
+            </button>
           </div>
         </div>
       )}
 
-      {/* Welcome Banner Card */}
-      <div className="card m-b-20" style={{
-        background: 'linear-gradient(135deg, var(--chub-purple) 0%, var(--chub-pink) 100%)',
-        color: '#FFFFFF',
-        border: 'none',
-        padding: '30px'
-      }}>
-        <h2 style={{ fontSize: '32px', color: '#FFFFFF', marginBottom: '8px' }}>Welcome, {name}</h2>
-        <p style={{ opacity: 0.9, fontSize: '15px', maxWidth: '600px', lineHeight: '1.6', marginBottom: '24px' }}>
-          This is your personal Employee Self-Service (ESS) hub. Monitor your check-in records, submit leaves, and manage your credentials securely.
-        </p>
-        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-          <span className="badge" style={{ backgroundColor: 'rgba(255,255,255,0.15)', color: '#FFFFFF' }}>{empId}</span>
-          <span className="badge" style={{ backgroundColor: 'rgba(255,255,255,0.15)', color: '#FFFFFF' }}>Role: {role}</span>
-          <span className="badge" style={{ backgroundColor: '#22C55E', color: '#FFFFFF' }}>Onboarding Verified</span>
+      {/* Royal Blue Top Header Banner showing Employee welcome */}
+      <div className="ess-blue-header-block" style={{ marginTop: '-24px', marginLeft: '-24px', marginRight: '-24px', padding: '24px 24px 30px 24px', borderBottomLeftRadius: '24px', borderBottomRightRadius: '24px', color: '#FFFFFF', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <span style={{ fontSize: '10px', opacity: 0.8, textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '600' }}>Employee Self-Service Workspace</span>
+            <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#FFFFFF', margin: '4px 0 2px 0', textTransform: 'none' }}>Welcome, {name}</h2>
+            <span style={{ fontSize: '11px', opacity: 0.9 }}>{designation} • {empId}</span>
+          </div>
+          <div style={{
+            width: '46px',
+            height: '46px',
+            borderRadius: '50%',
+            border: '2px solid #FFFFFF',
+            overflow: 'hidden',
+            backgroundColor: 'rgba(255, 255, 255, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            {profile?.employee?.photo_path ? (
+              <img 
+                src={`${API_BASE_URL.replace('/api', '')}/${profile.employee.photo_path}`}
+                alt={name}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+            ) : (
+              <User size={24} style={{ color: '#FFFFFF' }} />
+            )}
+          </div>
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '20px' }}>
         
-        {/* Column 1: Today's Action Center */}
-        <div className="card" style={{ flex: 1.2, minWidth: '320px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <div>
-            <h3 style={{ fontSize: '18px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', marginBottom: '16px' }}>
-              Today's Attendance Status
-            </h3>
-            
-            {attendance?.status === 'not_clocked_in' && (
-              <div style={{ padding: '20px 0', textAlign: 'center' }}>
-                <Clock size={40} style={{ color: 'var(--chub-muted)', marginBottom: '8px' }} />
-                <p style={{ fontWeight: 600, color: 'var(--text-main)' }}>You have not clocked in for today yet.</p>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Assigned Shift: {attendance.shift?.name || 'General Shift'}</span>
-              </div>
-            )}
-
-            {attendance?.status === 'clocked_in' && (
-              <div style={{ padding: '20px 0', textAlign: 'center' }}>
-                <UserCheck size={40} style={{ color: 'var(--color-success)', marginBottom: '8px' }} />
-                <p style={{ fontWeight: 600, color: 'var(--color-success)' }}>System Clock Active</p>
-                <span style={{ fontSize: '13px' }}>Clocked In at: <strong>{attendance.record?.clock_in_time} IST</strong></span>
-              </div>
-            )}
-
-            {attendance?.status === 'clocked_out' && (
-              <div style={{ padding: '20px 0', textAlign: 'center' }}>
-                <ShieldCheck size={40} style={{ color: 'var(--chub-pink)', marginBottom: '8px' }} />
-                <p style={{ fontWeight: 600 }}>Shift Completed</p>
-                <span style={{ fontSize: '13px' }}>Clocked Out: <strong>{attendance.record?.clock_out_time} IST</strong> | Hours: <strong>{attendance.record?.total_hours} hrs</strong></span>
-              </div>
-            )}
+        {/* Left Column: Today's Action Center Card */}
+        <div className="card" style={{ flex: 1.2, minWidth: '300px', display: 'flex', flexDirection: 'column' }}>
+          
+          {/* Work Mode Toggle: Home vs Office */}
+          <div className="ess-toggle-tabs">
+            <button 
+              className={`ess-toggle-tab-btn ${workMode === 'Home' ? 'active' : ''}`}
+              onClick={() => setWorkMode('Home')}
+            >
+              Home
+            </button>
+            <button 
+              className={`ess-toggle-tab-btn ${workMode === 'Office' ? 'active' : ''}`}
+              onClick={() => setWorkMode('Office')}
+            >
+              Office
+            </button>
           </div>
 
-          <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px', marginTop: '16px' }}>
-            <Link to="/ess/clock" className="btn btn-primary" style={{ width: '100%' }}>
-              Go to Attendance Center
-            </Link>
+          {/* Centered Shift tag */}
+          <div style={{ textAlign: 'center', marginBottom: '8px' }}>
+            <span className="ess-shift-tag">GENERAL SHIFT</span>
           </div>
+
+          {/* Live Clock Display */}
+          <div style={{ textAlign: 'center', margin: '8px 0 16px 0' }}>
+            <h1 style={{ fontSize: '32px', fontWeight: 'bold', color: '#1A1D20', margin: 0, fontFamily: 'Outfit' }}>
+              {timeStr || '00:00:00 AM'}
+            </h1>
+            <p style={{ color: '#6B7280', fontSize: '11px', margin: '4px 0 0 0' }}>{dateStr}</p>
+          </div>
+
+          {/* Action buttons matching exact requirements */}
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', margin: '8px 0 16px 0' }}>
+            <button 
+              onClick={handleClockIn} 
+              className="btn btn-primary"
+              disabled={loading || fetchingGps || attendance?.status === 'clocked_in' || attendance?.status === 'clocked_out' || attendance?.status === 'holiday'}
+              style={{ flex: 1.2, height: '38px', borderRadius: '20px', fontSize: '11px' }}
+            >
+              <Navigation size={12} style={{ transform: 'rotate(45deg)' }} /> Check In
+            </button>
+            <button 
+              onClick={() => alert("Break status recorded in session.")} 
+              className="btn btn-secondary"
+              disabled={loading || attendance?.status !== 'clocked_in'}
+              style={{ flex: 0.8, height: '38px', borderRadius: '20px', fontSize: '11px' }}
+            >
+              Break
+            </button>
+            <button 
+              onClick={handleClockOut} 
+              className="btn btn-danger"
+              disabled={loading || fetchingGps || attendance?.status !== 'clocked_in'}
+              style={{ flex: 1.2, height: '38px', borderRadius: '20px', fontSize: '11px', backgroundColor: '#EF4444', border: 'none' }}
+            >
+              Check Out
+            </button>
+          </div>
+
+          {/* Geolocation status diagnostics */}
+          <div style={{
+            backgroundColor: '#F8FAFC', padding: '10px 12px',
+            borderRadius: '10px', border: '1px solid #E2E8F0',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', fontSize: '11px', marginBottom: '16px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#4B5563' }}>
+              <MapPin size={14} style={{ color: coords ? '#10B981' : '#F59E0B' }} />
+              {fetchingGps ? (
+                <span>Locating Satellite...</span>
+              ) : coords ? (
+                <span>GPS verified (±{Math.round(coords.accuracy)}m)</span>
+              ) : (
+                <span style={{ color: '#B45309' }}>Bypass geofence mode</span>
+              )}
+            </div>
+            <button onClick={acquireGPS} className="btn" style={{ padding: '2px 8px', fontSize: '9px', backgroundColor: '#EEF2F6', border: 'none', color: '#2E62F6', borderRadius: '4px' }} disabled={fetchingGps}>
+              Refresh
+            </button>
+          </div>
+
+          {/* 3-column clocking stats row */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', borderTop: '1px solid #F1F5F9', paddingTop: '16px', marginTop: 'auto', textAlign: 'center' }}>
+            <div>
+              <span style={{ fontSize: '10px', color: '#6B7280', display: 'block', marginBottom: '2px' }}>Check In</span>
+              <strong style={{ fontSize: '13px', color: '#1A1D20' }}>{attendance?.record?.clock_in_time || '--:--'}</strong>
+            </div>
+            <div>
+              <span style={{ fontSize: '10px', color: '#6B7280', display: 'block', marginBottom: '2px' }}>Check Out</span>
+              <strong style={{ fontSize: '13px', color: '#1A1D20' }}>{attendance?.record?.clock_out_time || '--:--'}</strong>
+            </div>
+            <div>
+              <span style={{ fontSize: '10px', color: '#6B7280', display: 'block', marginBottom: '2px' }}>Working Hrs</span>
+              <strong style={{ fontSize: '13px', color: '#1A1D20' }}>{attendance?.record?.total_hours ? `${attendance.record.total_hours} hrs` : '0.0 hrs'}</strong>
+            </div>
+          </div>
+
         </div>
 
-        {/* Column 2: Leave Balances */}
-        <div className="card" style={{ flex: 1.5, minWidth: '320px' }}>
-          <h3 style={{ fontSize: '18px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', marginBottom: '16px' }}>
-            Remaining Leave Balances (CL / SL / EL)
-          </h3>
+        {/* Right Column: Leave Balances & Shortcuts */}
+        <div style={{ flex: 1.5, minWidth: '300px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          
+          {/* Leave Balances Card */}
+          <div className="card" style={{ flex: 1 }}>
+            <h3 style={{ fontSize: '14px', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '16px' }}>
+              Allocated Leave Balances (CL / SL / EL)
+            </h3>
 
-          {leaves.length === 0 ? (
-            <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>No leave balance allocated for this year yet.</p>
-          ) : (
-            <div className="ess-balances-grid">
+            {leaves.length === 0 ? (
+              <p style={{ fontSize: '12px', color: '#6B7280' }}>No leave balance allocated for this session yet.</p>
+            ) : (
+              <div className="ess-balances-grid" style={{ marginBottom: '0px' }}>
+                {leaves.map((bal, idx) => {
+                  const available = bal.total_days - bal.availed_days - bal.pending_days;
+                  return (
+                    <div key={idx} style={{ padding: '12px 10px', backgroundColor: '#F8FAFC', border: '1px solid #E5E7EB', borderRadius: '12px', textAlign: 'center' }}>
+                      <span style={{ fontSize: '9px', fontWeight: 700, color: '#4B5563', textTransform: 'uppercase', display: 'block' }}>
+                        {bal.leave_name || bal.leave_code}
+                      </span>
+                      <h4 style={{ fontSize: '22px', color: '#2E62F6', margin: '4px 0' }}>{available}</h4>
+                      <span style={{ fontSize: '9px', color: '#9CA3AF' }}>Available Days</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
-              {leaves.map((bal, idx) => {
-                const available = bal.total_days - bal.availed_days - bal.pending_days;
-                return (
-                  <div key={idx} style={{ padding: '16px 12px', backgroundColor: 'var(--chub-light-lavender)', borderRadius: '12px' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--chub-purple)', textTransform: 'uppercase' }}>
-                      {bal.leave_name || bal.leave_code}
-                    </span>
-                    <h4 style={{ fontSize: '28px', color: 'var(--chub-purple)', margin: '8px 0 2px 0' }}>{available}</h4>
-                    <span style={{ fontSize: '10px', color: 'var(--chub-muted)' }}>Available Days</span>
-                  </div>
-                );
-              })}
+          {/* Month Attendance Card */}
+          <div className="card">
+            <div className="flex-between" style={{ marginBottom: '12px' }}>
+              <h3 style={{ fontSize: '14px', fontWeight: '600', color: '#1A1D20', margin: 0 }}>Attendance for this Month</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 10px', backgroundColor: '#EEF2F6', borderRadius: '16px', fontSize: '10px', color: '#4B5563', fontWeight: 'bold' }}>
+                <span>{new Date().toLocaleString('en-US', { month: 'short' }).toUpperCase()}</span>
+                <Calendar size={11} />
+              </div>
             </div>
-          )}
 
-          <Link to="/ess/leaves" className="btn btn-secondary" style={{ width: '100%' }}>
-            Apply for Leave
-          </Link>
+            <div className="ess-stats-container">
+              <div className="ess-stat-box present">
+                <span>Present</span>
+                <strong>{monthlyStats.present}</strong>
+              </div>
+              <div className="ess-stat-box absent">
+                <span>Absents</span>
+                <strong>{monthlyStats.absent}</strong>
+              </div>
+              <div className="ess-stat-box late">
+                <span>Late In</span>
+                <strong>{monthlyStats.late}</strong>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', borderTop: '1px solid #F1F5F9', paddingTop: '12px' }}>
+              <span style={{ color: '#6B7280', fontSize: '11px' }}>Need time off from duty?</span>
+              <Link to="/ess/leaves" className="btn btn-secondary" style={{ padding: '4px 12px', fontSize: '10px', borderRadius: '20px' }}>
+                + Request
+              </Link>
+            </div>
+          </div>
+
         </div>
 
       </div>
 
       {/* Grid of Shortcuts */}
       <div className="grid-cols-4">
-        <Link to="/ess/performance" className="card card-hover" style={{ display: 'flex', flexDirection: 'column', gap: '10px', color: 'inherit' }}>
-          <Milestone size={24} style={{ color: 'var(--chub-pink)' }} />
-          <strong>Performance & Logs</strong>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Analyze monthly active hours and print attendance sheets.</span>
+        <Link to="/ess/performance" className="card card-hover" style={{ display: 'flex', flexDirection: 'column', gap: '8px', color: 'inherit', textDecoration: 'none' }}>
+          <Milestone size={20} style={{ color: '#2E62F6' }} />
+          <strong style={{ fontSize: '12px' }}>Performance & Logs</strong>
+          <span style={{ fontSize: '11px', color: '#6B7280' }}>Analyze active hours and view print sheets.</span>
         </Link>
         
-        <Link to="/ess/profile" className="card card-hover" style={{ display: 'flex', flexDirection: 'column', gap: '10px', color: 'inherit' }}>
-          <User size={24} style={{ color: 'var(--chub-purple)' }} />
-          <strong>My Profile details</strong>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>View read-only personal details and masked KYC.</span>
+        <Link to="/ess/profile" className="card card-hover" style={{ display: 'flex', flexDirection: 'column', gap: '8px', color: 'inherit', textDecoration: 'none' }}>
+          <User size={20} style={{ color: '#10B981' }} />
+          <strong style={{ fontSize: '12px' }}>My Profile Details</strong>
+          <span style={{ fontSize: '11px', color: '#6B7280' }}>View personal details and KYC parameters.</span>
         </Link>
 
-        <Link to="/ess/password" className="card card-hover" style={{ display: 'flex', flexDirection: 'column', gap: '10px', color: 'inherit' }}>
-          <Clock size={24} style={{ color: 'var(--color-success)' }} />
-          <strong>Change Password</strong>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Securely update account credentials.</span>
+        <Link to="/ess/profile" className="card card-hover" style={{ display: 'flex', flexDirection: 'column', gap: '8px', color: 'inherit', textDecoration: 'none' }}>
+          <Clock size={20} style={{ color: '#F59E0B' }} />
+          <strong style={{ fontSize: '12px' }}>Change Password</strong>
+          <span style={{ fontSize: '11px', color: '#6B7280' }}>Securely update corporate access passwords.</span>
         </Link>
       </div>
 

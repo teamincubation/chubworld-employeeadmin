@@ -647,7 +647,39 @@ const employeeController = {
     }
   },
 
-  // Self photo upload handler removed
+  // Self photo upload handler
+  uploadSelfPhoto: async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No image file uploaded.' });
+    }
+    const employeeId = req.user.employeeId;
+    if (!employeeId) {
+      return res.status(400).json({ message: 'No linked employee profile found for this user.' });
+    }
+    try {
+      // Normalize path to use forward slashes
+      const filePath = req.file.path.replace(/\\/g, '/');
+
+      // Update the employee record
+      const { error: updateErr } = await supabase
+        .from('employees')
+        .update({ photo_path: filePath })
+        .eq('id', employeeId);
+
+      if (updateErr) throw updateErr;
+
+      // Log audit trail
+      await logAudit(req, 'UPDATE_SELF_PHOTO', `employees/${employeeId}`, null, { photo_path: filePath });
+
+      res.json({
+        message: 'Profile photo uploaded successfully.',
+        photo_path: filePath
+      });
+    } catch (err) {
+      console.error('Upload Self Photo Error:', err.message);
+      res.status(500).json({ message: err.message || 'Internal server error while saving profile photo.' });
+    }
+  }
 };
 
 module.exports = employeeController;

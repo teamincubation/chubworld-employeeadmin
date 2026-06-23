@@ -735,5 +735,455 @@ button, input, select, textarea {
   }
 }
 
+/* =========================================================================
+   ESS Premium Royal Blue & White Theme Scoped Override
+   ========================================================================= */
+.ess-layout-container {
+  background-color: #F4F6FA !important;
+  color: #1A1D20 !important;
+  font-family: 'Outfit', 'Inter', sans-serif !important;
+  font-size: 13px !important;
+}
+
+/* Adjust all typography sizes inside ESS to moderate/small & minimalist */
+.ess-layout-container h1,
+.ess-layout-container h2,
+.ess-layout-container h3,
+.ess-layout-container h4 {
+  font-family: 'Outfit', sans-serif !important;
+  color: #1A1D20 !important;
+  text-transform: none !important;
+  letter-spacing: 0px !important;
+}
+
+.ess-layout-container h2 { font-size: 18px !important; font-weight: 700 !important; }
+.ess-layout-container h3 { font-size: 14px !important; font-weight: 600 !important; }
+.ess-layout-container h4 { font-size: 13px !important; font-weight: 600 !important; }
+
+.ess-layout-container p, 
+.ess-layout-container span, 
+.ess-layout-container td, 
+.ess-layout-container div,
+.ess-layout-container label {
+  font-size: 12px !important;
+  font-family: 'Inter', sans-serif !important;
+}
+
+/* Minimalist Clean White Card styling matching screenshots */
+.ess-layout-container .card {
+  background-color: #FFFFFF !important;
+  border: 1px solid #E5E7EB !important;
+  border-radius: 16px !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03) !important;
+  color: #1A1D20 !important;
+  padding: 20px !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.ess-layout-container .card-hover:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.06) !important;
+  border-color: #D1D5DB !important;
+}
+
+/* Text elements */
+.ess-layout-container strong, 
+.ess-layout-container b {
+  color: #1A1D20 !important;
+  font-size: 12px !important;
+}
+
+.ess-layout-container .form-label {
+  color: #4B5563 !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  margin-bottom: 6px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+}
+
+/* Form Input elements inside ESS */
+.ess-layout-container .form-control {
+  background-color: #FFFFFF !important;
+  border: 1px solid #D1D5DB !important;
+  color: #1A1D20 !important;
+  border-radius: 10px !important;
+  font-size: 12px !important;
+  height: 40px !important;
+}
+
+.ess-layout-container .form-control:focus {
+  border-color: #2E62F6 !important;
+  box-shadow: 0 0 0 3px rgba(46, 98, 246, 0.15) !important;
+}
+
+.ess-layout-container textarea.form-control {
+  height: auto !important;
+}
+
+.ess-layout-container select.form-control {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%232E62F6'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E") !important;
+  background-position: right 12px center !important;
+  background-repeat: no-repeat !important;
+  background-size: 16px !important;
+  padding-right: 36px !important;
+  appearance: none !important;
+}
+
+/* Table styling for minimalist white look */
+.ess-layout-container .table-container {
+  background: #FFFFFF !important;
+  border: 1px solid #E5E7EB !important;
+  border-radius: 12px !important;
+}
+
+.ess-layout-container .custom-table th {
+  background-color: #F8FAFC !important;
+  color: #4B5563 !important;
+  border-bottom: 1px solid #E5E7EB !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+}
+
+.ess-layout-container .custom-table td {
+  border-bottom: 1px solid #F1F5F9 !important;
+  color: #1A1D20 !important;
+  font-size: 12px !important;
+  padding: 12px 16px !important;
+}
+
+.ess-layout-container .custom-table tbody tr:hover {
+  background-color: #F8FAFC !important;
+}
+
+/* Redesign buttons matching Image 1: pills, solid blues, break borders, red checks */
+.ess-layout-container .btn {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  padding: 8px 16px !important;
+  border-radius: 30px !important;
+  text-transform: none !important;
+  letter-spacing: 0px !important;
+}
+
+.ess-layout-container .btn-primary {
+  background: #2E62F6 !important;
+  color: #FFFFFF !important;
+  box-shadow: none !important;
+}
+
+.ess-layout-container .btn-primary:hover {
+  background: #1D4ED8 !important;
+}
+
+.ess-layout-container .btn-secondary {
+  border: 1px solid #2E62F6 !important;
+  color: #2E62F6 !important;
+  background: #FFFFFF !important;
+}
+
+.ess-layout-container .btn-secondary:hover {
+  background: #EFF3FF !important;
+}
+
+.ess-layout-container .btn-danger {
+  background: #DC2626 !important;
+  color: #FFFFFF !important;
+}
+
+.ess-layout-container .btn-danger:hover {
+  background: #B91C1C !important;
+}
+
+/* Sidebar overrides for Royal Blue context when loaded */
+.ess-layout-container .sidebar-wrapper {
+  background-color: #FFFFFF !important;
+  border-right: 1px solid #E5E7EB !important;
+}
+
+.ess-layout-container .sidebar-wrapper span {
+  color: #4B5563 !important;
+}
+
+.ess-layout-container .sidebar-wrapper a {
+  color: #4B5563 !important;
+}
+
+.ess-layout-container .sidebar-wrapper a.active {
+  color: #FFFFFF !important;
+  background: #2E62F6 !important;
+}
+
+/* Mobile headers and bottom bar styles */
+.ess-mobile-header {
+  background-color: #2E62F6 !important;
+  color: #FFFFFF !important;
+  border-bottom: none !important;
+}
+
+.ess-mobile-bottom-nav {
+  background-color: #FFFFFF !important;
+  border-top: 1px solid #E5E7EB !important;
+}
+
+.ess-nav-tab {
+  color: #6B7280 !important;
+}
+
+.ess-nav-tab.active {
+  color: #2E62F6 !important;
+  background: none !important;
+}
+
+/* Profile Photo Upload widget aesthetics */
+.ess-avatar-uploader {
+  position: relative;
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  overflow: hidden;
+  cursor: pointer;
+  border: 3px solid #FFFFFF;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease;
+  margin: 0 auto;
+}
+
+.ess-avatar-uploader:hover {
+  transform: scale(1.03);
+}
+
+.ess-avatar-uploader img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ess-avatar-uploader-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  color: #FFFFFF;
+}
+
+.ess-avatar-uploader:hover .ess-avatar-uploader-overlay {
+  opacity: 1;
+}
+
+/* Balances Grid specific stylings */
+.ess-balances-grid > div {
+  background: #FFFFFF !important;
+  border: 1px solid #E5E7EB !important;
+  border-radius: 12px !important;
+  padding: 16px !important;
+}
+
+.ess-balances-grid > div h4 {
+  color: #1A1D20 !important;
+  font-weight: 700 !important;
+}
+
+.ess-balances-grid > div span {
+  color: #6B7280 !important;
+}
+
+/* Header Blue Block Panel */
+.ess-blue-header-block {
+  background: linear-gradient(180deg, #1E50DD 0%, #2E62F6 100%) !important;
+  color: #FFFFFF !important;
+  padding: 24px !important;
+  border-bottom-left-radius: 24px !important;
+  border-bottom-right-radius: 24px !important;
+  margin-bottom: 20px !important;
+}
+
+/* Toggle Pill Switch Tab row matching Image 1: Home vs Office */
+.ess-toggle-tabs {
+  display: flex;
+  background-color: #EEF2F6;
+  padding: 4px;
+  border-radius: 24px;
+  margin-bottom: 16px;
+  justify-content: center;
+  width: fit-content;
+  margin: 0 auto 16px auto;
+}
+
+.ess-toggle-tab-btn {
+  border: none;
+  background: none;
+  padding: 6px 20px;
+  border-radius: 20px;
+  font-size: 11px !important;
+  font-weight: 600;
+  color: #6B7280;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.ess-toggle-tab-btn.active {
+  background-color: #2E62F6;
+  color: #FFFFFF;
+  box-shadow: 0 2px 6px rgba(46, 98, 246, 0.2);
+}
+
+/* General Shift label tag */
+.ess-shift-tag {
+  background-color: #E6F4EA;
+  color: #137333;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 10px !important;
+  font-weight: 700;
+  display: inline-block;
+  margin-bottom: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Dashboard statistics boxes row: Present, Absents, Late in */
+.ess-stats-container {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.ess-stat-box {
+  border-radius: 12px;
+  padding: 12px 8px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.ess-stat-box.present {
+  background-color: #EBFDF4;
+  color: #047857;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.ess-stat-box.absent {
+  background-color: #FEF2F2;
+  color: #B91C1C;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.ess-stat-box.late {
+  background-color: #FFFBEB;
+  color: #B45309;
+  border: 1px solid rgba(245, 158, 17, 0.2);
+}
+
+.ess-stat-box span {
+  font-size: 10px !important;
+  font-weight: 600;
+  color: inherit !important;
+  opacity: 0.8;
+  margin-bottom: 4px;
+}
+
+.ess-stat-box strong {
+  font-size: 18px !important;
+  font-weight: 700;
+  color: inherit !important;
+}
+
+/* Minimalist list details in profile and other info screens */
+.ess-list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid #F1F5F9;
+  font-size: 13px;
+}
+
+.ess-list-item:last-child {
+  border-bottom: none;
+}
+
+.ess-list-item span {
+  color: #4B5563;
+}
+
+.ess-list-item strong {
+  color: #1A1D20;
+}
+
+/* Profile header card layout with center photo */
+.ess-profile-header-card {
+  text-align: center;
+  padding: 30px 20px 20px 20px !important;
+  position: relative;
+}
+
+.ess-profile-header-card-bg {
+  height: 100px;
+  background: #2E62F6;
+  border-top-left-radius: 15px;
+  border-top-right-radius: 15px;
+  margin: -20px -20px 0 -20px;
+}
+
+.ess-profile-avatar-wrapper {
+  margin-top: -50px;
+  margin-bottom: 12px;
+}
+
+/* Timeline/Schedule components */
+.ess-schedule-timeline {
+  position: relative;
+  padding-left: 24px;
+  border-left: 2px dashed #E5E7EB;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ess-schedule-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background-color: #F8FAFC;
+  border-radius: 10px;
+  border: 1px solid #E2E8F0;
+}
+
+.ess-schedule-item::before {
+  content: '';
+  position: absolute;
+  left: -29px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #2E62F6;
+  border: 2px solid #FFFFFF;
+}
+
+.ess-schedule-item.lunch::before {
+  background-color: #F59E0B;
+}
+
+.ess-schedule-item.break::before {
+  background-color: #EF4444;
+}
+
 
 

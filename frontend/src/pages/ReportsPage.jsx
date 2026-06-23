@@ -331,72 +331,138 @@ export default function ReportsPage() {
               </button>
               
               <div style={{ 
-                border: '2px solid var(--border-color)', 
-                borderRadius: '16px', 
-                padding: '30px', 
-                backgroundColor: 'rgba(255, 255, 255, 0.01)', 
-                boxShadow: '0 8px 30px rgba(0,0,0,0.1)' 
+                border: '1px solid #E2D9E5', 
+                borderRadius: '12px', 
+                padding: '0', 
+                backgroundColor: '#FFFFFF', 
+                color: '#101010',
+                boxShadow: '0 4px 20px rgba(66, 23, 79, 0.05)',
+                fontFamily: "'Inter', sans-serif",
+                overflow: 'hidden'
               }} className="printable-payslip">
-                <div style={{ textAlign: 'center', borderBottom: '2px solid var(--chub-purple)', paddingBottom: '20px', marginBottom: '24px' }}>
-                  <h3 style={{ fontSize: '22px', color: 'var(--chub-purple)', margin: 0 }}>C-Hub / Chubworld</h3>
-                  <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: 'var(--chub-pink)', textTransform: 'uppercase', fontWeight: 600 }}>Creating Wow World</p>
-                  <h4 style={{ margin: '16px 0 0 0', fontSize: '16px', fontWeight: 600 }}>PAYSLIP FOR THE MONTH OF {new Date(reportYear, reportMonth - 1).toLocaleString('en-US', { month: 'LONG' }).toUpperCase()} {reportYear}</h4>
-                </div>
+                
+                {/* Top Branding Accent Bar */}
+                <div style={{
+                  height: '8px',
+                  background: 'linear-gradient(90deg, #42174F 0%, #D85AA6 100%)'
+                }} />
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px', fontSize: '14px' }}>
-                  <div>
-                    <div style={{ marginBottom: '8px' }}><strong>Employee Name:</strong> {reportData[0].full_name}</div>
-                    <div style={{ marginBottom: '8px' }}><strong>Employee ID:</strong> {reportData[0].employee_id}</div>
-                    <div><strong>Department:</strong> {reportData[0].department_name}</div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ marginBottom: '8px' }}><strong>Days in Month:</strong> {reportData[0].total_calendar_days || 30}</div>
-                    <div style={{ marginBottom: '8px' }}><strong>Present Days:</strong> {reportData[0].days_present}</div>
-                    <div><strong>Absent/LOP Days:</strong> {reportData[0].days_absent + reportData[0].lop_taken} (Compensated: {reportData[0].compensated_days})</div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '20px', borderTop: '1px solid var(--border-color)', borderBottom: '1px solid var(--border-color)', padding: '20px 0', marginBottom: '24px' }}>
-                  <div style={{ flex: 1, borderRight: '1px solid var(--border-color)', paddingRight: '20px' }}>
-                    <h5 style={{ margin: '0 0 12px 0', color: '#2ec4b6', fontSize: '15px', fontWeight: 600 }}>Earnings</h5>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
-                      <span>Base Salary:</span>
-                      <strong>₹{reportData[0].base_salary?.toLocaleString('en-IN')}</strong>
+                <div style={{ padding: '30px' }}>
+                  {/* Header Logo & Title */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E2D9E5', paddingBottom: '20px', marginBottom: '24px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                      <img src="/logo.jpeg" alt="C-Hub" style={{ width: '60px', height: '60px', borderRadius: '10px', border: '1px solid #E2D9E5' }} />
+                      <div style={{ textAlign: 'left' }}>
+                        <h3 style={{ fontSize: '18px', color: '#42174F', margin: 0, fontWeight: 'bold', fontFamily: "'Outfit', sans-serif", textTransform: 'uppercase', letterSpacing: '0.5px' }}>C-Hub / Chubworld</h3>
+                        <span style={{ fontSize: '11px', color: '#D85AA6', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>Creating Wow World</span>
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
-                      <span>Holiday OT Pay:</span>
-                      <strong>₹{reportData[0].overtime_pay?.toLocaleString('en-IN')}</strong>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px', paddingTop: '8px', borderTop: '1px dashed var(--border-color)', fontWeight: 'bold' }}>
-                      <span>Gross Earnings:</span>
-                      <span>₹{(reportData[0].base_salary + reportData[0].overtime_pay).toLocaleString('en-IN')}</span>
+                    <div style={{ textAlign: 'right' }}>
+                      <h2 style={{ fontSize: '20px', color: '#42174F', margin: 0, fontFamily: "'Outfit', sans-serif", fontWeight: 'bold' }}>PAYSLIP</h2>
+                      <span style={{ fontSize: '12px', color: '#6B6470', fontWeight: '600' }}>
+                        For {new Date(reportYear, reportMonth - 1).toLocaleString('en-US', { month: 'long' }).toUpperCase()} {reportYear}
+                      </span>
                     </div>
                   </div>
 
-                  <div style={{ flex: 1, paddingLeft: '20px' }}>
-                    <h5 style={{ margin: '0 0 12px 0', color: '#e71d36', fontSize: '15px', fontWeight: 600 }}>Deductions</h5>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
-                      <span>Leave Pay Cuts:</span>
-                      <strong>₹{reportData[0].total_pay_cut?.toLocaleString('en-IN')}</strong>
+                  {/* Employee Details Grid */}
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', 
+                    gap: '20px', 
+                    marginBottom: '24px', 
+                    fontSize: '13px', 
+                    backgroundColor: '#F8F6F9', 
+                    padding: '16px', 
+                    borderRadius: '8px', 
+                    border: '1px solid #E2D9E5' 
+                  }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div><span style={{ color: '#6B6470' }}>Employee Name:</span> <strong style={{ color: '#101010' }}>{reportData[0].full_name}</strong></div>
+                      <div><span style={{ color: '#6B6470' }}>Employee ID:</span> <strong style={{ color: '#101010' }}>{reportData[0].employee_id}</strong></div>
+                      <div><span style={{ color: '#6B6470' }}>Department:</span> <strong style={{ color: '#101010' }}>{reportData[0].department_name}</strong></div>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px', paddingTop: '8px', borderTop: '1px dashed var(--border-color)', fontWeight: 'bold' }}>
-                      <span>Total Deductions:</span>
-                      <span>₹{reportData[0].total_pay_cut?.toLocaleString('en-IN')}</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div><span style={{ color: '#6B6470' }}>Calendar Days:</span> <strong style={{ color: '#101010' }}>{reportData[0].total_calendar_days || 30} Days</strong></div>
+                      <div><span style={{ color: '#6B6470' }}>Days Present:</span> <strong style={{ color: '#22C55E' }}>{reportData[0].days_present} Days</strong></div>
+                      <div><span style={{ color: '#6B6470' }}>Lops & Absent:</span> <strong style={{ color: '#EF4444' }}>{reportData[0].days_absent + reportData[0].lop_taken} Days</strong></div>
                     </div>
                   </div>
-                </div>
 
-                <div style={{ 
-                  backgroundColor: 'rgba(216, 90, 166, 0.05)', 
-                  border: '1px solid var(--chub-pink)', 
-                  borderRadius: '8px', 
-                  padding: '16px', 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  alignItems: 'center' 
-                }}>
-                  <span style={{ fontSize: '16px', fontWeight: 600, color: 'var(--chub-pink)' }}>Net Payable Salary:</span>
-                  <span style={{ fontSize: '24px', fontWeight: 'bold', color: 'var(--chub-pink)' }}>₹{reportData[0].net_payout?.toLocaleString('en-IN')}</span>
+                  {/* Earnings vs Deductions Table */}
+                  <div style={{ display: 'flex', gap: '20px', border: '1px solid #E2D9E5', borderRadius: '8px', overflow: 'hidden', marginBottom: '24px' }}>
+                    
+                    {/* Earnings Column */}
+                    <div style={{ flex: 1, borderRight: '1px solid #E2D9E5' }}>
+                      <div style={{ backgroundColor: '#42174F', color: '#FFFFFF', padding: '10px 16px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Earnings
+                      </div>
+                      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                          <span style={{ color: '#6B6470' }}>Base Salary:</span>
+                          <strong style={{ color: '#101010' }}>₹{reportData[0].base_salary?.toLocaleString('en-IN')}</strong>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                          <span style={{ color: '#6B6470' }}>Holiday OT Pay:</span>
+                          <strong style={{ color: '#101010' }}>₹{reportData[0].overtime_pay?.toLocaleString('en-IN')}</strong>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px', paddingTop: '10px', borderTop: '1px dashed #E2D9E5', fontWeight: 'bold', fontSize: '13px', color: '#42174F' }}>
+                          <span>Gross Earnings:</span>
+                          <span>₹{(reportData[0].base_salary + reportData[0].overtime_pay).toLocaleString('en-IN')}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Deductions Column */}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ backgroundColor: '#42174F', color: '#FFFFFF', padding: '10px 16px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Deductions
+                      </div>
+                      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                          <span style={{ color: '#6B6470' }}>Leave Pay Cuts:</span>
+                          <strong style={{ color: '#101010' }}>₹{reportData[0].total_pay_cut?.toLocaleString('en-IN')}</strong>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px', paddingTop: '10px', borderTop: '1px dashed #E2D9E5', fontWeight: 'bold', fontSize: '13px', color: '#EF4444' }}>
+                          <span>Total Deductions:</span>
+                          <span>₹{reportData[0].total_pay_cut?.toLocaleString('en-IN')}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Net Payout Summary Block */}
+                  <div style={{ 
+                    background: 'linear-gradient(135deg, rgba(66, 23, 79, 0.05) 0%, rgba(216, 90, 166, 0.05) 100%)', 
+                    border: '1px solid #D85AA6', 
+                    borderRadius: '8px', 
+                    padding: '16px 20px', 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    marginBottom: '40px'
+                  }}>
+                    <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#42174F', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Net Payable Salary (Net Take Home):</span>
+                    <span style={{ fontSize: '22px', fontWeight: 'bold', color: '#D85AA6', borderBottom: '3px double #D85AA6', paddingBottom: '2px' }}>
+                      ₹{reportData[0].net_payout?.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+
+                  {/* Signature Section */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '50px', padding: '0 10px', fontSize: '13px' }}>
+                    <div style={{ textAlign: 'center', width: '200px' }}>
+                      <div style={{ borderTop: '1px solid #6B6470', paddingTop: '8px', color: '#6B6470', fontWeight: '500' }}>
+                        Employee Signature
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'center', width: '220px' }}>
+                      <div style={{ height: '40px' }} /> {/* space for stamp/sign */}
+                      <div style={{ borderTop: '1px solid #42174F', paddingTop: '8px', color: '#42174F', fontWeight: 'bold' }}>
+                        Authorized Signatory
+                      </div>
+                    </div>
+                  </div>
+
                 </div>
               </div>
             </div>

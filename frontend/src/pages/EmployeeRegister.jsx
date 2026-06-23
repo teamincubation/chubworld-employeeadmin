@@ -1019,6 +1019,34 @@ export default function EmployeeRegister() {
           {/* Profile Header Sheet */}
           <div className="card" style={{ marginBottom: '24px' }}>
             <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap', alignItems: 'center' }}>
+              
+              {/* Profile Photo Display */}
+              <div style={{
+                width: '80px',
+                height: '80px',
+                borderRadius: '50%',
+                overflow: 'hidden',
+                boxShadow: 'var(--shadow-sm)',
+                border: '3px solid var(--chub-pink)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'var(--chub-gradient)',
+                flexShrink: 0
+              }}>
+                {profileData.employee.photo_path ? (
+                  <img 
+                    src={`${API_BASE_URL.replace('/api', '')}/${profileData.employee.photo_path}`} 
+                    alt={profileData.employee.full_name} 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                  />
+                ) : (
+                  <div style={{ fontSize: '28px', color: '#FFFFFF', fontWeight: 'bold' }}>
+                    {profileData.employee.full_name?.charAt(0).toUpperCase()}
+                  </div>
+                )}
+              </div>
+
               <div>
                 <h3 style={{ fontSize: '26px', color: 'var(--chub-purple)', marginBottom: '4px' }}>{profileData.employee.full_name}</h3>
                 <p style={{ fontWeight: 600, color: 'var(--chub-pink)', fontSize: '14px', textTransform: 'uppercase', marginBottom: '8px' }}>

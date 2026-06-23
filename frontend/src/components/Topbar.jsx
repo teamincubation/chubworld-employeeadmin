@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, API_BASE_URL } from '../context/AuthContext';
 import { Sun, Moon, Bell, Shield, User as UserIcon, Menu } from 'lucide-react';
 
 export default function Topbar() {
@@ -178,7 +178,15 @@ export default function Topbar() {
             justifyContent: 'center',
             background: 'var(--chub-gradient)'
           }}>
-            <UserIcon size={18} style={{ color: '#FFFFFF' }} />
+            {user?.employee?.photo_path ? (
+              <img 
+                src={`${API_BASE_URL.replace('/api', '')}/${user.employee.photo_path}`} 
+                alt="Profile" 
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+              />
+            ) : (
+              <UserIcon size={18} style={{ color: '#FFFFFF' }} />
+            )}
           </div>
 
         </div>

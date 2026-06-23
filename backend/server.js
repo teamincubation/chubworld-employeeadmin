@@ -56,6 +56,7 @@ app.get('/api/health', (req, res) => {
 
 // Serve static directory (Fallback route if direct serve permitted, but API downloads route is preferred for security)
 // We block direct index traversal of uploads folder
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/uploads', (req, res, next) => {
   res.status(403).json({ message: 'Direct directory traversal blocked.' });
 });
