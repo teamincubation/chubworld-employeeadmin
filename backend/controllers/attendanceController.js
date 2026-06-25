@@ -139,7 +139,6 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 }
 
 const attendanceController = {
-  // Check Today's status
   getTodayStatus: async (req, res) => {
     const employeeId = req.user.employeeId;
     if (!employeeId) {
@@ -168,11 +167,44 @@ const attendanceController = {
       const { data: holidays } = await supabase.from('holidays').select('*').eq('date', todayStr).limit(1);
       const holidayName = holidays && holidays.length > 0 ? holidays[0].name : null;
 
+      // Fetch employee's assigned location and employment type
+      const { data: empDetails } = await supabase
+        .from('employees')
+        .select('employment_type, work_location_id, work_locations(latitude, longitude, radius_meters, allow_without_location, name)')
+        .eq('id', employeeId)
+        .limit(1);
+
+      const emp = (empDetails && empDetails.length > 0) ? empDetails[0] : null;
+      const workLocation = emp ? emp.work_locations : null;
+      const employmentType = emp ? emp.employment_type : 'Full-time';
+
+      // Load settings for the employment type working hours
+      const suffix = employmentType.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+      const keyIn = `work_hours_${suffix}_in`;
+      const keyOut = `work_hours_${suffix}_out`;
+
+      const { data: workHoursSettings } = await supabase
+        .from('system_settings')
+        .select('*')
+        .in('setting_key', [keyIn, keyOut]);
+
+      const workHours = {
+        in: '09:30 AM',
+        out: '05:30 PM'
+      };
+
+      if (workHoursSettings && workHoursSettings.length > 0) {
+        workHoursSettings.forEach(s => {
+          if (s.setting_key === keyIn) workHours.in = s.setting_value;
+          if (s.setting_key === keyOut) workHours.out = s.setting_value;
+        });
+      }
+
       if (!logs || logs.length === 0) {
         if (holidayName) {
-          return res.json({ status: 'holiday', holidayName, shift });
+          return res.json({ status: 'holiday', holidayName, shift, workLocation, workHours });
         }
-        return res.json({ status: 'not_clocked_in', shift });
+        return res.json({ status: 'not_clocked_in', shift, workLocation, workHours });
       }
 
       const record = logs[0];
@@ -185,11 +217,13 @@ const attendanceController = {
           status: 'clocked_in', 
           record, 
           shift,
-          warningNotification: diffHours >= 8.0
+          warningNotification: diffHours >= 8.0,
+          workLocation,
+          workHours
         });
       }
 
-      res.json({ status: 'clocked_out', record, shift });
+      res.json({ status: 'clocked_out', record, shift, workLocation, workHours });
     } catch (err) {
       console.error('GetTodayStatus Error:', err.message);
       res.status(500).json({ message: 'Error checking attendance status.' });

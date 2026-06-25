@@ -1604,6 +1604,55 @@ export default function SecurityCenter() {
                     </div>
                   </div>
 
+                  {/* Common Working Hour Assignation */}
+                  <h4 style={{ color: 'var(--chub-purple)', fontSize: '14px', margin: '24px 0 12px 0' }}>Employment Common Working Hours</h4>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '12px', marginBottom: '12px' }}>
+                    Specify the default shift timelines (Clock-in and Clock-out times) per employment type. Note: These are informational and displayed on the ESS shift timeline.
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px', border: '1px solid var(--border-color)', padding: '16px', borderRadius: '8px' }}>
+                    {[
+                      { type: 'Full-time', label: 'Full-Time' },
+                      { type: 'Part-time', label: 'Part-Time' },
+                      { type: 'Intern', label: 'Intern' },
+                      { type: 'Consultant', label: 'Consultant' },
+                      { type: 'Contract', label: 'Contract' },
+                      { type: 'Probation', label: 'Probation' },
+                      { type: 'Remote (WFH)', label: 'Remote (WFH)' }
+                    ].map(({ type, label }) => {
+                      const suffix = type.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+                      const keyIn = `work_hours_${suffix}_in`;
+                      const keyOut = `work_hours_${suffix}_out`;
+                      
+                      return (
+                        <div key={type} style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap', borderBottom: '1px dashed var(--border-color)', paddingBottom: '8px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: '600', width: '130px' }}>{label}</span>
+                          <div style={{ display: 'flex', gap: '8px', flex: 1, minWidth: '200px' }}>
+                            <div style={{ flex: 1 }}>
+                              <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Clock-In (e.g. 09:30 AM)</label>
+                              <input 
+                                type="text" 
+                                className="form-control" 
+                                placeholder="09:30 AM"
+                                value={settings[keyIn] === undefined ? '09:30 AM' : settings[keyIn]}
+                                onChange={(e) => setSettings({ ...settings, [keyIn]: e.target.value })}
+                              />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Clock-Out (e.g. 05:30 PM)</label>
+                              <input 
+                                type="text" 
+                                className="form-control" 
+                                placeholder="05:30 PM"
+                                value={settings[keyOut] === undefined ? '05:30 PM' : settings[keyOut]}
+                                onChange={(e) => setSettings({ ...settings, [keyOut]: e.target.value })}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
                   <h4 style={{ color: 'var(--chub-purple)', fontSize: '14px', margin: '24px 0 12px 0' }}>SMTP E-Mail Server Settings (Hostinger Config)</h4>
                   <div className="form-group">
                     <label className="form-label">SMTP Host</label>

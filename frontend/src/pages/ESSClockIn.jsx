@@ -12,8 +12,8 @@ export default function ESSClockIn() {
   const [record, setRecord] = useState(null);
   const [shift, setShift] = useState(null);
   const [holidayName, setHolidayName] = useState('');
-  const [loading, setLoading] = useState(true);
   const [warningNotification, setWarningNotification] = useState(false);
+  const [workHours, setWorkHours] = useState({ in: '09:30 AM', out: '05:30 PM' });
 
   // Live IST Clock
   const [timeStr, setTimeStr] = useState('');
@@ -74,6 +74,7 @@ export default function ESSClockIn() {
       setStatus(data.status);
       setRecord(data.record);
       setShift(data.shift);
+      setWorkHours(data.workHours || { in: '09:30 AM', out: '05:30 PM' });
       setWarningNotification(!!data.warningNotification);
       if (data.status === 'holiday') {
         setHolidayName(data.holidayName || 'Scheduled Holiday');
@@ -239,23 +240,16 @@ export default function ESSClockIn() {
           )}
 
           {status === 'clocked_in' && (
-            <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
-              <button 
-                onClick={() => alert("Tea/Lunch Break toggled.")} 
-                className="btn btn-secondary"
-                style={{ width: '130px', height: '130px', borderRadius: '50%', fontSize: '15px', display: 'inline-flex', flexDirection: 'column', gap: '6px', justifyContent: 'center', alignItems: 'center' }}
-                disabled={loading}
-              >
-                Break
-              </button>
+            <div>
               <button 
                 onClick={handleClockOut} 
                 className="btn btn-danger"
-                style={{ width: '130px', height: '130px', borderRadius: '50%', fontSize: '15px', display: 'inline-flex', flexDirection: 'column', gap: '6px', justifyContent: 'center', alignItems: 'center', backgroundColor: '#EF4444', border: 'none' }}
+                style={{ width: '140px', height: '140px', borderRadius: '50%', fontSize: '16px', display: 'inline-flex', flexDirection: 'column', gap: '6px', justifyContent: 'center', alignItems: 'center', backgroundColor: '#EF4444', border: 'none' }}
                 disabled={loading || fetchingGps}
               >
                 Check Out
               </button>
+              <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '12px' }}>Click to register your shift end.</p>
             </div>
           )}
 
@@ -327,27 +321,7 @@ export default function ESSClockIn() {
               <span style={{ color: '#6B7280', fontSize: '11px' }}>Shift Start Boundary</span>
             </div>
             <span className="badge" style={{ backgroundColor: '#EFF6FF', color: '#2E62F6', fontSize: '10px' }}>
-              {shift?.start_time || '09:30 AM'}
-            </span>
-          </div>
-
-          <div className="ess-schedule-item break">
-            <div>
-              <strong style={{ display: 'block', fontSize: '12px' }}>Tea Break</strong>
-              <span style={{ color: '#6B7280', fontSize: '11px' }}>Short Intermission (15 mins)</span>
-            </div>
-            <span className="badge" style={{ backgroundColor: '#FEF2F2', color: '#EF4444', fontSize: '10px' }}>
-              11:30 AM
-            </span>
-          </div>
-
-          <div className="ess-schedule-item lunch">
-            <div>
-              <strong style={{ display: 'block', fontSize: '12px' }}>Lunch Break</strong>
-              <span style={{ color: '#6B7280', fontSize: '11px' }}>Midday Interval (45 mins)</span>
-            </div>
-            <span className="badge" style={{ backgroundColor: '#FFFBEB', color: '#F59E0B', fontSize: '10px' }}>
-              01:30 PM
+              {workHours.in}
             </span>
           </div>
 
@@ -357,7 +331,7 @@ export default function ESSClockIn() {
               <span style={{ color: '#6B7280', fontSize: '11px' }}>Shift End Boundary</span>
             </div>
             <span className="badge" style={{ backgroundColor: '#ECFDF5', color: '#10B981', fontSize: '10px' }}>
-              {shift?.end_time || '06:30 PM'}
+              {workHours.out}
             </span>
           </div>
 

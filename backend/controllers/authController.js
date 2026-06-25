@@ -760,7 +760,7 @@ const authController = {
       if (req.user.roleName === 'Employee') {
         const { data: employees, error: empErr } = await supabase
           .from('employees')
-          .select('id, employee_id, full_name, email, mobile, onboarding_status, photo_path, status')
+          .select('id, employee_id, full_name, email, mobile, onboarding_status, photo_path, status, employment_type')
           .eq('id', req.user.id)
           .is('deleted_at', null);
 
@@ -783,7 +783,8 @@ const authController = {
             email: employee.email,
             mobile: employee.mobile,
             onboarding_status: employee.onboarding_status,
-            photo_path: employee.photo_path
+            photo_path: employee.photo_path,
+            employment_type: employee.employment_type
           }
         });
       }
@@ -804,11 +805,14 @@ const authController = {
       // Fetch employee profile details if linked to this user account
       const { data: empProfile, error: empError } = await supabase
         .from('employees')
-        .select('id, employee_id, full_name, mobile, onboarding_status, photo_path')
+        .select('id, employee_id, full_name, mobile, onboarding_status, photo_path, employment_type')
         .eq('user_id', user.id);
         
       if (!empError && empProfile && empProfile.length > 0) {
-        employeeProfile = empProfile[0];
+        employeeProfile = {
+          ...empProfile[0],
+          employment_type: empProfile[0].employment_type
+        };
       } else if (roleName === 'Admin Controller') {
         const { data: controllerAcc } = await supabase
           .from('admin_controller_access')

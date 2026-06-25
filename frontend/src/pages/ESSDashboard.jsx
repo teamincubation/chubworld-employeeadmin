@@ -244,6 +244,45 @@ export default function ESSDashboard() {
     );
   }
 
+  const getDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371e3; // Earth radius in meters
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c; // distance in meters
+  };
+
+  const renderLocationStatus = () => {
+    const wl = attendance?.workLocation;
+    if (!wl) return 'No Assigned Location Geofence';
+
+    const locationName = wl.name || 'Office Geofence';
+    if (fetchingGps) {
+      return `${locationName} (Locating GPS...)`;
+    }
+    if (!coords) {
+      return `${locationName} (GPS not acquired)`;
+    }
+
+    if (wl.latitude && wl.longitude) {
+      const dist = getDistance(coords.latitude, coords.longitude, wl.latitude, wl.longitude);
+      const radius = wl.radius_meters || 100;
+      if (dist <= radius) {
+        return `${locationName} (Inside boundary)`;
+      } else {
+        const outsideMeters = Math.round(dist - radius);
+        return `${locationName} (${outsideMeters}m outside boundary)`;
+      }
+    }
+    return locationName;
+  };
+
   const name = profile?.employee?.full_name || profile?.user?.email?.split('@')[0] || '';
   const designation = profile?.employee?.designation_name || 'Team Associate';
   const empId = profile?.employee?.employee_id || 'CHUB-EMP';
@@ -415,20 +454,26 @@ export default function ESSDashboard() {
         {/* Left Column: Today's Action Center Card */}
         <div className="card" style={{ flex: 1.2, minWidth: '300px', display: 'flex', flexDirection: 'column' }}>
           
-          {/* Work Mode Toggle: Home vs Office */}
-          <div className="ess-toggle-tabs">
-            <button 
-              className={`ess-toggle-tab-btn ${workMode === 'Home' ? 'active' : ''}`}
-              onClick={() => setWorkMode('Home')}
-            >
-              Home
-            </button>
-            <button 
-              className={`ess-toggle-tab-btn ${workMode === 'Office' ? 'active' : ''}`}
-              onClick={() => setWorkMode('Office')}
-            >
-              Office
-            </button>
+          {/* Geofence Location Display (replacing Home/Office toggle) */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            backgroundColor: '#EFF6FF',
+            padding: '12px 16px',
+            borderRadius: '12px',
+            border: '1px solid #BFDBFE',
+            marginBottom: '16px'
+          }}>
+            <MapPin size={18} style={{ color: '#2E62F6', flexShrink: 0 }} />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '10px', color: '#1E40AF', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Assigned Geofence
+              </span>
+              <span style={{ fontSize: '13px', fontWeight: '600', color: '#1E3A8A' }}>
+                {renderLocationStatus()}
+              </span>
+            </div>
           </div>
 
           {/* Centered Shift tag */}
@@ -444,29 +489,21 @@ export default function ESSDashboard() {
             <p style={{ color: '#6B7280', fontSize: '11px', margin: '4px 0 0 0' }}>{dateStr}</p>
           </div>
 
-          {/* Action buttons matching exact requirements */}
+          {/* Action buttons matching exact requirements (Break button removed) */}
           <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', margin: '8px 0 16px 0' }}>
             <button 
               onClick={handleClockIn} 
               className="btn btn-primary"
               disabled={loading || fetchingGps || attendance?.status === 'clocked_in' || attendance?.status === 'clocked_out' || attendance?.status === 'holiday'}
-              style={{ flex: 1.2, height: '38px', borderRadius: '20px', fontSize: '11px' }}
+              style={{ flex: 1, height: '38px', borderRadius: '20px', fontSize: '11px' }}
             >
               <Navigation size={12} style={{ transform: 'rotate(45deg)' }} /> Check In
-            </button>
-            <button 
-              onClick={() => alert("Break status recorded in session.")} 
-              className="btn btn-secondary"
-              disabled={loading || attendance?.status !== 'clocked_in'}
-              style={{ flex: 0.8, height: '38px', borderRadius: '20px', fontSize: '11px' }}
-            >
-              Break
             </button>
             <button 
               onClick={handleClockOut} 
               className="btn btn-danger"
               disabled={loading || fetchingGps || attendance?.status !== 'clocked_in'}
-              style={{ flex: 1.2, height: '38px', borderRadius: '20px', fontSize: '11px', backgroundColor: '#EF4444', border: 'none' }}
+              style={{ flex: 1, height: '38px', borderRadius: '20px', fontSize: '11px', backgroundColor: '#EF4444', border: 'none' }}
             >
               Check Out
             </button>

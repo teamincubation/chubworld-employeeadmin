@@ -512,6 +512,7 @@ export default function EmployeeRegister() {
                   <option value="Intern">Intern</option>
                   <option value="Contract">Contract</option>
                   <option value="Probation">Probation</option>
+                  <option value="Remote (WFH)">Remote (WFH)</option>
                 </select>
               </div>
 
@@ -564,9 +565,35 @@ export default function EmployeeRegister() {
                       <tr key={emp.id}>
                         <td style={{ fontWeight: 'bold', color: 'var(--chub-purple)' }}>{emp.employee_id}</td>
                         <td>
-                          <div>
-                            <div style={{ fontWeight: 600 }}>{emp.full_name}</div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{emp.email} | {emp.mobile}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div style={{
+                              width: '36px',
+                              height: '36px',
+                              borderRadius: '50%',
+                              overflow: 'hidden',
+                              backgroundColor: '#E2E8F0',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                              border: '1.5px solid var(--chub-purple)'
+                            }}>
+                              {emp.photo_path ? (
+                                <img
+                                  src={`${API_BASE_URL.replace('/api', '')}/${emp.photo_path}`}
+                                  alt={emp.full_name}
+                                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                />
+                              ) : (
+                                <div style={{ fontSize: '13px', color: 'var(--chub-purple)', fontWeight: 'bold' }}>
+                                  {emp.full_name?.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <div style={{ fontWeight: 600 }}>{emp.full_name}</div>
+                              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{emp.email} | {emp.mobile}</div>
+                            </div>
                           </div>
                         </td>
                         <td>{emp.department_name || 'Unassigned'}</td>
@@ -862,6 +889,7 @@ export default function EmployeeRegister() {
                     <option value="Intern">Intern</option>
                     <option value="Contract">Contract</option>
                     <option value="Probation">Probation</option>
+                    <option value="Remote (WFH)">Remote (WFH)</option>
                   </select>
                 </div>
                 <div className="form-group">
