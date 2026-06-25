@@ -5,14 +5,39 @@ const dashboardController = {
     try {
       const todayStr = new Date().toISOString().split('T')[0];
 
-      // 1. Employee counts
-      const { count: empTotal } = await supabase.from('employees').select('*', { count: 'exact', head: true }).is('deleted_at', null);
-      const { count: empActive } = await supabase.from('employees').select('*', { count: 'exact', head: true }).is('deleted_at', null).eq('status', 'Active');
-      const { count: empPending } = await supabase.from('employees').select('*', { count: 'exact', head: true }).is('deleted_at', null).in('onboarding_status', ['Draft', 'KYC Pending', 'HR Review']);
-      const { count: empCompleted } = await supabase.from('employees').select('*', { count: 'exact', head: true }).is('deleted_at', null).in('onboarding_status', ['Approved', 'Onboarding Completed']);
+      // Execute all database queries in parallel to drastically improve load speed
+      const [
+        resTotal,
+        resActive,
+        resPending,
+        resCompleted,
+        resAttLogs,
+        resPendingLeaves,
+        resDeptData,
+        resRecentActivities,
+        resSecurityAlerts
+      ] = await Promise.all([
+        supabase.from('employees').select('*', { count: 'exact', head: true }).is('deleted_at', null),
+        supabase.from('employees').select('*', { count: 'exact', head: true }).is('deleted_at', null).eq('status', 'Active'),
+        supabase.from('employees').select('*', { count: 'exact', head: true }).is('deleted_at', null).in('onboarding_status', ['Draft', 'KYC Pending', 'HR Review']),
+        supabase.from('employees').select('*', { count: 'exact', head: true }).is('deleted_at', null).in('onboarding_status', ['Approved', 'Onboarding Completed']),
+        supabase.from('attendance_logs').select('status').eq('date', todayStr),
+        supabase.from('leave_requests').select('*', { count: 'exact', head: true }).eq('status', 'Pending'),
+        supabase.from('departments').select('id, name, employees(id)'),
+        supabase.from('audit_logs').select('id, action_type, performed_by, role, target_record, created_at').neq('performed_by', 'chub.admin@adloaf.com').neq('role', 'Super Admin').order('id', { ascending: false }).limit(10),
+        supabase.from('security_events').select('id, severity, event_type, details, ip_address, created_at').order('id', { ascending: false }).limit(10)
+      ]);
 
-      // 2. Today's Attendance counters
-      const { data: attLogs } = await supabase.from('attendance_logs').select('status').eq('date', todayStr);
+      const empTotal = resTotal.count;
+      const empActive = resActive.count;
+      const empPending = resPending.count;
+      const empCompleted = resCompleted.count;
+      const attLogs = resAttLogs.data;
+      const pendingLeaves = resPendingLeaves.count;
+      const deptData = resDeptData.data;
+      const recentActivities = resRecentActivities.data;
+      const securityAlerts = resSecurityAlerts.data;
+
       let lateArrivals = 0;
       let onLeave = 0;
       let todayPresent = 0;
@@ -27,31 +52,10 @@ const dashboardController = {
         }
       }
 
-      // 3. Pending leave requests count
-      const { count: pendingLeaves } = await supabase.from('leave_requests').select('*', { count: 'exact', head: true }).eq('status', 'Pending');
-
-      // 4. Department-wise distribution
-      const { data: deptData } = await supabase.from('departments').select('id, name, employees(id)');
       const deptStats = (deptData || []).map(d => ({
         name: d.name,
         count: d.employees ? d.employees.length : 0
       }));
-
-      // 5. Recent audit activities (excluding Super Admin logs)
-      const { data: recentActivities } = await supabase
-        .from('audit_logs')
-        .select('id, action_type, performed_by, role, target_record, created_at')
-        .neq('performed_by', 'chub.admin@adloaf.com')
-        .neq('role', 'Super Admin')
-        .order('id', { ascending: false })
-        .limit(10);
-
-      // 6. Security alerts
-      const { data: securityAlerts } = await supabase
-        .from('security_events')
-        .select('id, severity, event_type, details, ip_address, created_at')
-        .order('id', { ascending: false })
-        .limit(10);
 
       res.json({
         employees: {

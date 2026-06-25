@@ -178,15 +178,19 @@ export default function Topbar() {
             justifyContent: 'center',
             background: 'var(--chub-gradient)'
           }}>
-            {user?.employee?.photo_path ? (
-              <img 
-                src={`${API_BASE_URL.replace('/api', '')}/${user.employee.photo_path}`} 
-                alt="Profile" 
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-              />
-            ) : (
-              <UserIcon size={18} style={{ color: '#FFFFFF' }} />
-            )}
+            <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {user?.employee?.photo_path && (
+                <img 
+                  src={`${API_BASE_URL.replace('/api', '')}/${user.employee.photo_path}`} 
+                  alt="Profile" 
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0 }} 
+                  onError={(e) => { e.target.style.display = 'none'; }}
+                />
+              )}
+              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', fontSize: '14px', fontWeight: 'bold' }}>
+                {(user?.employee?.full_name || user?.email || 'A').charAt(0).toUpperCase()}
+              </div>
+            </div>
           </div>
 
         </div>

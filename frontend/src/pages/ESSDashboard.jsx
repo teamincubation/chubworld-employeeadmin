@@ -288,6 +288,9 @@ export default function ESSDashboard() {
   const empId = profile?.employee?.employee_id || 'CHUB-EMP';
   const role = profile?.user?.role || 'Employee';
 
+  const isClockInDisabled = loading || fetchingGps || attendance?.status === 'clocked_in' || attendance?.status === 'clocked_out' || attendance?.status === 'holiday';
+  const isClockOutDisabled = loading || fetchingGps || attendance?.status !== 'clocked_in';
+
   return (
     <div style={{ padding: '0px' }}>
       
@@ -436,15 +439,19 @@ export default function ESSDashboard() {
             justifyContent: 'center',
             flexShrink: 0
           }}>
-            {profile?.employee?.photo_path ? (
-              <img 
-                src={`${API_BASE_URL.replace('/api', '')}/${profile.employee.photo_path}`}
-                alt={name}
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              />
-            ) : (
-              <User size={24} style={{ color: '#FFFFFF' }} />
-            )}
+            <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {profile?.employee?.photo_path && (
+                <img 
+                  src={`${API_BASE_URL.replace('/api', '')}/${profile.employee.photo_path}`}
+                  alt={name}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0 }}
+                  onError={(e) => { e.target.style.display = 'none'; }}
+                />
+              )}
+              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #1E50DD 0%, #2E62F6 100%)', color: '#FFFFFF', fontSize: '18px', fontWeight: 'bold' }}>
+                {name.charAt(0).toUpperCase()}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -494,18 +501,40 @@ export default function ESSDashboard() {
             <button 
               onClick={handleClockIn} 
               className="btn btn-primary"
-              disabled={loading || fetchingGps || attendance?.status === 'clocked_in' || attendance?.status === 'clocked_out' || attendance?.status === 'holiday'}
-              style={{ flex: 1, height: '38px', borderRadius: '20px', fontSize: '11px' }}
+              disabled={isClockInDisabled}
+              style={{
+                flex: 1,
+                height: '38px',
+                borderRadius: '20px',
+                fontSize: '11px',
+                backgroundColor: isClockInDisabled ? '#9CA3AF' : '#2E62F6',
+                color: '#FFFFFF',
+                border: 'none',
+                cursor: isClockInDisabled ? 'not-allowed' : 'pointer',
+                opacity: isClockInDisabled ? 0.7 : 1,
+                boxShadow: isClockInDisabled ? 'none' : '0 2px 4px rgba(46, 98, 246, 0.2)'
+              }}
             >
-              <Navigation size={12} style={{ transform: 'rotate(45deg)' }} /> Check In
+              <Navigation size={12} style={{ transform: 'rotate(45deg)' }} /> Clock In
             </button>
             <button 
               onClick={handleClockOut} 
               className="btn btn-danger"
-              disabled={loading || fetchingGps || attendance?.status !== 'clocked_in'}
-              style={{ flex: 1, height: '38px', borderRadius: '20px', fontSize: '11px', backgroundColor: '#EF4444', border: 'none' }}
+              disabled={isClockOutDisabled}
+              style={{
+                flex: 1,
+                height: '38px',
+                borderRadius: '20px',
+                fontSize: '11px',
+                backgroundColor: isClockOutDisabled ? '#9CA3AF' : '#EF4444',
+                color: '#FFFFFF',
+                border: 'none',
+                cursor: isClockOutDisabled ? 'not-allowed' : 'pointer',
+                opacity: isClockOutDisabled ? 0.7 : 1,
+                boxShadow: isClockOutDisabled ? 'none' : '0 2px 4px rgba(239, 68, 68, 0.2)'
+              }}
             >
-              Check Out
+              Clock Out
             </button>
           </div>
 
@@ -533,11 +562,11 @@ export default function ESSDashboard() {
           {/* 3-column clocking stats row */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', borderTop: '1px solid #F1F5F9', paddingTop: '16px', marginTop: 'auto', textAlign: 'center' }}>
             <div>
-              <span style={{ fontSize: '10px', color: '#6B7280', display: 'block', marginBottom: '2px' }}>Check In</span>
+              <span style={{ fontSize: '10px', color: '#6B7280', display: 'block', marginBottom: '2px' }}>Clock In</span>
               <strong style={{ fontSize: '13px', color: '#1A1D20' }}>{attendance?.record?.clock_in_time || '--:--'}</strong>
             </div>
             <div>
-              <span style={{ fontSize: '10px', color: '#6B7280', display: 'block', marginBottom: '2px' }}>Check Out</span>
+              <span style={{ fontSize: '10px', color: '#6B7280', display: 'block', marginBottom: '2px' }}>Clock Out</span>
               <strong style={{ fontSize: '13px', color: '#1A1D20' }}>{attendance?.record?.clock_out_time || '--:--'}</strong>
             </div>
             <div>

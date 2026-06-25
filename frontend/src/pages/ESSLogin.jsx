@@ -157,7 +157,7 @@ export default function ESSLogin() {
             fontSize: '13px',
             margin: 0
           }}>
-            Secure Check-in & Employee self-service
+            Secure Clock-in & Employee self-service
           </p>
         </div>
 
@@ -310,7 +310,7 @@ export default function ESSLogin() {
         </div>
         <div style={{ flex: 1 }}>
           <h4 style={{ fontSize: '13px', color: '#FFFFFF', margin: '0 0 2px 0' }}>
-            Daily Check-In App
+            Daily Clock-In App
           </h4>
           <p style={{ fontSize: '11px', color: '#A39BA6', margin: 0, lineHeight: 1.4 }}>
             For a premium app experience on Android, install C-Hub directly from your browser menu.

@@ -1189,5 +1189,19 @@ button, input, select, textarea {
   color: #FFFFFF !important;
 }
 
+.ess-layout-container .ess-blue-header-block h2 {
+  color: #FFFFFF !important;
+}
+
+.btn:disabled, .btn[disabled] {
+  background: #9CA3AF !important;
+  color: #FFFFFF !important;
+  border: none !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+  transform: none !important;
+  opacity: 0.7 !important;
+}
+
 
 

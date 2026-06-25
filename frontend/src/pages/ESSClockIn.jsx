@@ -9,6 +9,7 @@ export default function ESSClockIn() {
   
   // Status state
   const [status, setStatus] = useState('not_clocked_in'); 
+  const [loading, setLoading] = useState(false);
   const [record, setRecord] = useState(null);
   const [shift, setShift] = useState(null);
   const [holidayName, setHolidayName] = useState('');
@@ -215,7 +216,7 @@ export default function ESSClockIn() {
         }}>
           <ShieldAlert size={18} style={{ color: '#FFFFFF', flexShrink: 0 }} />
           <span style={{ fontSize: '11px', color: '#FFFFFF', lineHeight: '1.4' }}>
-            <strong>Warning:</strong> Active session exceeds 8 hours. Please check out.
+            <strong>Warning:</strong> Active session exceeds 8 hours. Please clock out.
           </span>
         </div>
       )}
@@ -230,7 +231,22 @@ export default function ESSClockIn() {
               <button 
                 onClick={handleClockIn} 
                 className="btn btn-primary"
-                style={{ width: '140px', height: '140px', borderRadius: '50%', fontSize: '16px', display: 'inline-flex', flexDirection: 'column', gap: '6px', justifyContent: 'center', alignItems: 'center' }}
+                style={{
+                  width: '140px',
+                  height: '140px',
+                  borderRadius: '50%',
+                  fontSize: '16px',
+                  display: 'inline-flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  backgroundColor: (loading || fetchingGps) ? '#9CA3AF' : '#2E62F6',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  cursor: (loading || fetchingGps) ? 'not-allowed' : 'pointer',
+                  opacity: (loading || fetchingGps) ? 0.7 : 1
+                }}
                 disabled={loading || fetchingGps}
               >
                 <Navigation size={22} style={{ transform: 'rotate(45deg)' }} /> Clock In
@@ -244,10 +260,25 @@ export default function ESSClockIn() {
               <button 
                 onClick={handleClockOut} 
                 className="btn btn-danger"
-                style={{ width: '140px', height: '140px', borderRadius: '50%', fontSize: '16px', display: 'inline-flex', flexDirection: 'column', gap: '6px', justifyContent: 'center', alignItems: 'center', backgroundColor: '#EF4444', border: 'none' }}
+                style={{
+                  width: '140px',
+                  height: '140px',
+                  borderRadius: '50%',
+                  fontSize: '16px',
+                  display: 'inline-flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  backgroundColor: (loading || fetchingGps) ? '#9CA3AF' : '#EF4444',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  cursor: (loading || fetchingGps) ? 'not-allowed' : 'pointer',
+                  opacity: (loading || fetchingGps) ? 0.7 : 1
+                }}
                 disabled={loading || fetchingGps}
               >
-                Check Out
+                Clock Out
               </button>
               <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '12px' }}>Click to register your shift end.</p>
             </div>
@@ -317,7 +348,7 @@ export default function ESSClockIn() {
           
           <div className="ess-schedule-item">
             <div>
-              <strong style={{ display: 'block', fontSize: '12px' }}>Check-In Target</strong>
+              <strong style={{ display: 'block', fontSize: '12px' }}>Clock-In Target</strong>
               <span style={{ color: '#6B7280', fontSize: '11px' }}>Shift Start Boundary</span>
             </div>
             <span className="badge" style={{ backgroundColor: '#EFF6FF', color: '#2E62F6', fontSize: '10px' }}>
@@ -327,7 +358,7 @@ export default function ESSClockIn() {
 
           <div className="ess-schedule-item">
             <div>
-              <strong style={{ display: 'block', fontSize: '12px' }}>Check-Out Target</strong>
+              <strong style={{ display: 'block', fontSize: '12px' }}>Clock-Out Target</strong>
               <span style={{ color: '#6B7280', fontSize: '11px' }}>Shift End Boundary</span>
             </div>
             <span className="badge" style={{ backgroundColor: '#ECFDF5', color: '#10B981', fontSize: '10px' }}>

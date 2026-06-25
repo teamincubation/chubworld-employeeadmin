@@ -169,34 +169,36 @@ export default function ESSProfile() {
                 onChange={handlePhotoUpload} 
               />
               <div 
-                className="ess-avatar-uploader" 
-                onClick={() => document.getElementById('profile-photo-input-main').click()}
-                title="Click to update photo"
-              >
-                {employee.photo_path ? (
-                  <img 
-                    src={`${API_BASE_URL.replace('/api', '')}/${employee.photo_path}`} 
-                    alt={employee.full_name} 
-                  />
-                ) : (
-                  <div style={{
-                    width: '100%',
-                    height: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    background: 'linear-gradient(135deg, #1E50DD 0%, #2E62F6 100%)',
-                    color: '#FFFFFF',
-                    fontSize: '24px',
-                    fontWeight: 'bold'
-                  }}>
-                    {employee.full_name?.charAt(0).toUpperCase()}
-                  </div>
-                )}
-                <div className="ess-avatar-uploader-overlay">
-                  <Camera size={16} />
-                </div>
+              className="ess-avatar-uploader" 
+              onClick={() => document.getElementById('profile-photo-input-main').click()}
+              title="Click to update photo"
+              style={{ position: 'relative', overflow: 'hidden' }}
+            >
+              {employee.photo_path && (
+                <img 
+                  src={`${API_BASE_URL.replace('/api', '')}/${employee.photo_path}`} 
+                  alt={employee.full_name} 
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0 }}
+                  onError={(e) => { e.target.style.display = 'none'; }}
+                />
+              )}
+              <div style={{
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'linear-gradient(135deg, #1E50DD 0%, #2E62F6 100%)',
+                color: '#FFFFFF',
+                fontSize: '24px',
+                fontWeight: 'bold'
+              }}>
+                {employee.full_name?.charAt(0).toUpperCase()}
               </div>
+              <div className="ess-avatar-uploader-overlay">
+                <Camera size={16} />
+              </div>
+            </div>
             </div>
 
             <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#1A1D20', margin: '4px 0 2px 0' }}>{employee.full_name}</h3>

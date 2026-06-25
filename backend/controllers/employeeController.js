@@ -86,7 +86,26 @@ const employeeController = {
   autoCreateUserAccount: async (employeeId, email, name, customPassword) => {
     try {
       const bcrypt = require('bcryptjs');
-      const defaultPassword = customPassword || 'CHubEmp@2026';
+      let defaultPassword = customPassword;
+      if (!defaultPassword || defaultPassword.trim().length === 0) {
+        const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+        const lowercase = 'abcdefghijkmnopqrstuvwxyz';
+        const numbers = '23456789';
+        const specials = '!@#$';
+        const all = uppercase + lowercase + numbers + specials;
+        let pass = '';
+        pass += uppercase.charAt(Math.floor(Math.random() * uppercase.length));
+        pass += lowercase.charAt(Math.floor(Math.random() * lowercase.length));
+        pass += numbers.charAt(Math.floor(Math.random() * numbers.length));
+        pass += specials.charAt(Math.floor(Math.random() * specials.length));
+        for (let i = 4; i < 10; i++) {
+          pass += all.charAt(Math.floor(Math.random() * all.length));
+        }
+        defaultPassword = pass.split('').sort(() => 0.5 - Math.random()).join('');
+      } else {
+        defaultPassword = defaultPassword.trim();
+      }
+
       const salt = await bcrypt.genSalt(10);
       const passHash = await bcrypt.hash(defaultPassword, salt);
 
@@ -310,11 +329,20 @@ const employeeController = {
       }
 
 
-      // Fetch manager separately to avoid complex self-join query errors in Supabase JS
+      // Fetch manager, documents, and KYC in parallel to improve performance
+      const managerPromise = employeeRaw.reporting_manager_id
+        ? supabase.from('employees').select('full_name').eq('id', employeeRaw.reporting_manager_id)
+        : Promise.resolve({ data: null });
+      
+      const docsPromise = supabase.from('employee_documents').select('id, document_type, document_name, uploaded_at').eq('employee_id', id);
+      
+      const kycPromise = supabase.from('employee_kyc').select('bank_name, bank_ifsc, upi_id, aadhaar_number_encrypted, pan_number_encrypted, bank_account_number_encrypted').eq('employee_id', id);
+
+      const [mgrRes, docsRes, kycRes] = await Promise.all([managerPromise, docsPromise, kycPromise]);
+
       let manager_name = null;
-      if (employeeRaw.reporting_manager_id) {
-        const { data: mgr } = await supabase.from('employees').select('full_name').eq('id', employeeRaw.reporting_manager_id);
-        if (mgr && mgr.length > 0) manager_name = mgr[0].full_name;
+      if (mgrRes.data && mgrRes.data.length > 0) {
+        manager_name = mgrRes.data[0].full_name;
       }
 
       const employee = { 
@@ -335,11 +363,8 @@ const employeeController = {
         employee.joining_salary = '₹ XXXXX';
       }
 
-      // Fetch documents
-      const { data: docs } = await supabase.from('employee_documents').select('id, document_type, document_name, uploaded_at').eq('employee_id', id);
-      
-      // Fetch KYC (Get masked values only)
-      const { data: kycRecords } = await supabase.from('employee_kyc').select('bank_name, bank_ifsc, upi_id, aadhaar_number_encrypted, pan_number_encrypted, bank_account_number_encrypted').eq('employee_id', id);
+      const docs = docsRes.data || [];
+      const kycRecords = kycRes.data || [];
       
       let kyc = {
         aadhaar: 'XXXX XXXX XXXX',

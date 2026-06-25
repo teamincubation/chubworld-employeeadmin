@@ -578,17 +578,19 @@ export default function EmployeeRegister() {
                               flexShrink: 0,
                               border: '1.5px solid var(--chub-purple)'
                             }}>
-                              {emp.photo_path ? (
-                                <img
-                                  src={`${API_BASE_URL.replace('/api', '')}/${emp.photo_path}`}
-                                  alt={emp.full_name}
-                                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                />
-                              ) : (
+                              <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {emp.photo_path && (
+                                  <img
+                                    src={`${API_BASE_URL.replace('/api', '')}/${emp.photo_path}`}
+                                    alt={emp.full_name}
+                                    style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0 }}
+                                    onError={(e) => { e.target.style.display = 'none'; }}
+                                  />
+                                )}
                                 <div style={{ fontSize: '13px', color: 'var(--chub-purple)', fontWeight: 'bold' }}>
                                   {emp.full_name?.charAt(0).toUpperCase()}
                                 </div>
-                              )}
+                              </div>
                             </div>
                             <div>
                               <div style={{ fontWeight: 600 }}>{emp.full_name}</div>
@@ -783,14 +785,14 @@ export default function EmployeeRegister() {
                   <input type="text" className="form-control" placeholder="Contact Number" value={formData.emergency_contact_number} onChange={(e) => setFormData({...formData, emergency_contact_number: e.target.value})} />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Login Password {viewMode === 'add' ? '*' : '(Leave blank to keep current)'}</label>
+                  <label className="form-label">Login Password (Optional - Admin Decided)</label>
                   <input 
                     type="password" 
                     className="form-control" 
-                    placeholder={viewMode === 'add' ? "Temporary login password" : "New password if changing"}
+                    placeholder="Leave blank to generate random password"
                     value={formData.login_password} 
                     onChange={(e) => setFormData({...formData, login_password: e.target.value})} 
-                    required={viewMode === 'add'}
+                    required={false}
                   />
                 </div>
               </div>
@@ -1062,17 +1064,19 @@ export default function EmployeeRegister() {
                 background: 'var(--chub-gradient)',
                 flexShrink: 0
               }}>
-                {profileData.employee.photo_path ? (
-                  <img 
-                    src={`${API_BASE_URL.replace('/api', '')}/${profileData.employee.photo_path}`} 
-                    alt={profileData.employee.full_name} 
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                  />
-                ) : (
+                <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {profileData.employee.photo_path && (
+                    <img 
+                      src={`${API_BASE_URL.replace('/api', '')}/${profileData.employee.photo_path}`} 
+                      alt={profileData.employee.full_name} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0 }} 
+                      onError={(e) => { e.target.style.display = 'none'; }}
+                    />
+                  )}
                   <div style={{ fontSize: '28px', color: '#FFFFFF', fontWeight: 'bold' }}>
                     {profileData.employee.full_name?.charAt(0).toUpperCase()}
                   </div>
-                )}
+                </div>
               </div>
 
               <div>
