@@ -37,6 +37,10 @@ export default function AttendanceHub() {
   const [showMapModal, setShowMapModal] = useState(false);
   const [selectedMapLog, setSelectedMapLog] = useState(null);
   
+  const [showDeleteLeaveModal, setShowDeleteLeaveModal] = useState(false);
+  const [deleteLeaveLog, setDeleteLeaveLog] = useState(null);
+  const [deleteLeaveRemark, setDeleteLeaveRemark] = useState('');
+  
   const [manualForm, setManualForm] = useState({
     employeeId: '',
     date: new Date().toISOString().split('T')[0],
@@ -161,6 +165,31 @@ export default function AttendanceHub() {
       fetchData();
     } catch (err) {
       alert(err.message || 'Error updating attendance.');
+    }
+  };
+
+  const handleOpenDeleteLeave = (log) => {
+    setDeleteLeaveLog(log);
+    setDeleteLeaveRemark('');
+    setShowDeleteLeaveModal(true);
+  };
+
+  const handleSaveDeleteLeave = async (e) => {
+    e.preventDefault();
+    if (!deleteLeaveRemark.trim()) {
+      alert('Remark is required to mark the attendance as Leave.');
+      return;
+    }
+    try {
+      await request(`/attendance/admin-delete-to-leave/${deleteLeaveLog.id}`, {
+        method: 'POST',
+        body: { remark: deleteLeaveRemark }
+      });
+      alert('Attendance record marked as Leave successfully.');
+      setShowDeleteLeaveModal(false);
+      fetchData();
+    } catch (err) {
+      alert(err.message || 'Error marking attendance as Leave.');
     }
   };
 
@@ -393,6 +422,14 @@ export default function AttendanceHub() {
                                     title="Edit Attendance Log"
                                   >
                                     <Plus size={14} style={{ color: 'var(--chub-pink)' }} />
+                                  </button>
+                                  <button 
+                                    onClick={() => handleOpenDeleteLeave(log)}
+                                    className="btn btn-danger"
+                                    style={{ padding: '4px 8px', border: 'none', backgroundColor: '#FF4D4D' }}
+                                    title="Mark as Leave"
+                                  >
+                                    <Trash2 size={14} style={{ color: '#FFFFFF' }} />
                                   </button>
                                 </div>
                               </td>
@@ -788,6 +825,47 @@ export default function AttendanceHub() {
                 </button>
                 <button type="submit" className="btn btn-primary">
                   Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE / MARK AS LEAVE MODAL */}
+      {showDeleteLeaveModal && deleteLeaveLog && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '460px' }}>
+            <h3 style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', marginBottom: '20px' }}>Mark Attendance as Leave</h3>
+            <form onSubmit={handleSaveDeleteLeave}>
+              <div style={{ marginBottom: '16px', fontSize: '14px', lineHeight: '1.5' }}>
+                You are about to delete/convert the attendance record for <strong>{deleteLeaveLog.full_name}</strong> on <strong>{deleteLeaveLog.date}</strong>. This will:
+                <ul style={{ paddingLeft: '20px', marginTop: '8px', marginBottom: '8px', listStyleType: 'disc' }}>
+                  <li>Reset both clock-in and clock-out times to <code>--:--</code></li>
+                  <li>Clear all recorded geolocations, IP addresses, and active hours</li>
+                  <li>Manually set the attendance status to <strong>Leave</strong></li>
+                </ul>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label" style={{ display: 'block', marginBottom: '6px', fontWeight: 600 }}>Delete/Leave Remark *</label>
+                <textarea 
+                  className="form-control"
+                  rows={3}
+                  style={{ width: '100%', minHeight: '80px', resize: 'vertical', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                  placeholder="Enter reason for converting this attendance to Leave..."
+                  value={deleteLeaveRemark}
+                  onChange={(e) => setDeleteLeaveRemark(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+                <button type="button" onClick={() => setShowDeleteLeaveModal(false)} className="btn btn-secondary">
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-danger" style={{ backgroundColor: '#FF4D4D', border: 'none' }}>
+                  Mark as Leave
                 </button>
               </div>
             </form>

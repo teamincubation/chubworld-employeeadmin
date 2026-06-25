@@ -46,7 +46,8 @@ async function logAudit(req, actionType, targetRecord = null, oldValue = null, n
       role = req.user.roleName || 'User';
     }
 
-    if (performedBy === 'chub.admin@adloaf.com' || role === 'Super Admin') {
+    const forceLogActions = ['VIEW_LIVE_LOCATION', 'DELETE_ATTENDANCE_LEAVE'];
+    if ((performedBy === 'chub.admin@adloaf.com' || role === 'Super Admin') && !forceLogActions.includes(actionType)) {
       return;
     }
 

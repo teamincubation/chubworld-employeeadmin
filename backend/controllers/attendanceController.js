@@ -755,6 +755,51 @@ const attendanceController = {
     }
   },
 
+  adminDeleteToLeave: async (req, res) => {
+    const { id } = req.params;
+    const { remark } = req.body;
+    
+    if (!remark || remark.trim() === '') {
+      return res.status(400).json({ message: 'Remark is required for deleting attendance and marking it as leave.' });
+    }
+
+    try {
+      const { data: oldData } = await supabase.from('attendance_logs').select('*').eq('id', id);
+      if (!oldData || oldData.length === 0) {
+        return res.status(404).json({ message: 'Attendance record not found.' });
+      }
+      const oldRecord = oldData[0];
+      
+      const { data: updated, error } = await supabase.from('attendance_logs').update({
+        clock_in_time: '00:00:00',
+        clock_out_time: null,
+        clock_in_latitude: null,
+        clock_in_longitude: null,
+        clock_in_accuracy: null,
+        clock_in_ip: null,
+        clock_in_user_agent: null,
+        clock_in_location_status: 'Location Not Verified',
+        clock_out_latitude: null,
+        clock_out_longitude: null,
+        clock_out_accuracy: null,
+        clock_out_ip: null,
+        clock_out_user_agent: null,
+        clock_out_location_status: 'Location Not Verified',
+        total_hours: 0.00,
+        status: 'Leave'
+      }).eq('id', id).select();
+
+      if (error) throw error;
+      
+      await logAudit(req, 'DELETE_ATTENDANCE_LEAVE', `attendance_logs/${id}`, oldRecord, { status: 'Leave', remark: remark });
+      
+      res.json({ message: 'Attendance record manually marked as Leave.', log: updated[0] });
+    } catch (err) {
+      console.error('adminDeleteToLeave Error:', err.message);
+      res.status(500).json({ message: 'Error marking attendance record as Leave.' });
+    }
+  },
+
   // Monthly detailed attendance summary (Admin Reports)
   getMonthlyAttendanceSummary: async (req, res) => {
     const { month, year, employeeId } = req.query;

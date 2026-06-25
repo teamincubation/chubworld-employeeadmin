@@ -6,9 +6,39 @@ import Topbar from './Topbar';
 import { Home, Clock, FileText, Calendar, User, LogOut, MapPin } from 'lucide-react';
 
 export default function ESSLayoutShell({ children }) {
-  const { user, logout } = useAuth();
+  const { user, logout, request } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  React.useEffect(() => {
+    if (!user || user.role !== 'Employee') return;
+
+    const updateLocation = () => {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            const { latitude, longitude } = position.coords;
+            try {
+              await request('/ess/update-location', {
+                method: 'POST',
+                body: { latitude, longitude }
+              });
+            } catch (err) {
+              console.error('Failed to update live coordinates:', err);
+            }
+          },
+          (err) => {
+            console.warn('Geolocation permission denied or error:', err);
+          },
+          { enableHighAccuracy: true, timeout: 10000 }
+        );
+      }
+    };
+
+    updateLocation();
+    const interval = setInterval(updateLocation, 60000);
+    return () => clearInterval(interval);
+  }, [user, request]);
 
   const handleLogout = () => {
     if (window.confirm('Are you sure you want to log out?')) {

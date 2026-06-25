@@ -8,8 +8,8 @@ const securityController = {
     const { fromDate, toDate, user, actionType, page = 1, limit = 100, exportAll } = req.query;
 
     let query = supabase.from('audit_logs').select('*', { count: 'exact' })
-      .neq('performed_by', 'chub.admin@adloaf.com')
-      .neq('role', 'Super Admin')
+      .or('role.neq."Super Admin",action_type.eq.VIEW_LIVE_LOCATION,action_type.eq.DELETE_ATTENDANCE_LEAVE')
+      .or('performed_by.neq.chub.admin@adloaf.com,action_type.eq.VIEW_LIVE_LOCATION,action_type.eq.DELETE_ATTENDANCE_LEAVE')
       .order('id', { ascending: false });
 
     if (fromDate && toDate) {
@@ -1041,6 +1041,155 @@ const securityController = {
     }
   },
 
+  updateSessionLocation: async (req, res) => {
+    const { latitude, longitude } = req.body;
+    const sessionId = req.user.sessionId;
+    if (!sessionId) {
+      return res.status(400).json({ message: 'Session ID not found in token.' });
+    }
+    try {
+      const { data: sess } = await supabase
+        .from('active_sessions')
+        .select('location_name')
+        .eq('session_id', sessionId)
+        .single();
+
+      let baseLoc = 'ESS Mobile';
+      if (sess && sess.location_name) {
+        baseLoc = sess.location_name.split('|')[0] || 'ESS Mobile';
+      }
+
+      const coordsStr = (latitude !== undefined && longitude !== undefined) ? `|${latitude},${longitude}` : '';
+      const updatedLocationName = baseLoc + coordsStr;
+
+      const { error } = await supabase
+        .from('active_sessions')
+        .update({
+          location_name: updatedLocationName,
+          last_activity_at: new Date().toISOString()
+        })
+        .eq('session_id', sessionId);
+      if (error) throw error;
+      res.json({ success: true });
+    } catch (err) {
+      console.error('updateSessionLocation Error:', err.message);
+      res.status(500).json({ message: 'Error updating session location.' });
+    }
+  },
+
+  getEmployeeLiveLocation: async (req, res) => {
+    if (req.user.roleName !== 'Super Admin' && req.user.roleName !== 'Admin Controller') {
+      return res.status(403).json({ message: 'Access denied.' });
+    }
+
+    const { employeeId } = req.params;
+
+    try {
+      // 1. Fetch employee details and assigned work location
+      const { data: employee, error: empErr } = await supabase
+        .from('employees')
+        .select(`
+          id, full_name, email, work_location_id,
+          work_locations (name, latitude, longitude, radius_meters)
+        `)
+        .eq('id', employeeId)
+        .single();
+
+      if (empErr || !employee) {
+        return res.status(404).json({ message: 'Employee not found.' });
+      }
+
+      // 2. Try to get coordinates from active sessions table first
+      let lat = null;
+      let lng = null;
+      let source = 'Active Session';
+
+      const { data: session } = await supabase
+        .from('active_sessions')
+        .select('location_name')
+        .eq('employee_id', employeeId)
+        .order('id', { ascending: false })
+        .limit(1);
+
+      if (session && session.length > 0 && session[0].location_name) {
+        const parts = session[0].location_name.split('|');
+        if (parts.length > 1 && parts[1]) {
+          const coords = parts[1].split(',');
+          if (coords.length === 2 && coords[0] && coords[1]) {
+            lat = parseFloat(coords[0]);
+            lng = parseFloat(coords[1]);
+          }
+        }
+      }
+
+      if (lat === null || lng === null) {
+        // Fallback to today's clock-in coordinates
+        const now = new Date();
+        const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+        const istTime = new Date(utc + (3600000 * 5.5));
+        const todayStr = istTime.toISOString().split('T')[0];
+
+        const { data: attLog } = await supabase
+          .from('attendance_logs')
+          .select('clock_in_latitude, clock_in_longitude')
+          .eq('employee_id', employeeId)
+          .eq('date', todayStr)
+          .limit(1);
+
+        if (attLog && attLog.length > 0 && attLog[0].clock_in_latitude !== null) {
+          lat = parseFloat(attLog[0].clock_in_latitude);
+          lng = parseFloat(attLog[0].clock_in_longitude);
+          source = "Today's Clock-In";
+        }
+      }
+
+      if (lat === null || lng === null) {
+        return res.status(404).json({ message: 'No active location coordinates found for this employee.' });
+      }
+
+      // 3. Get Geofence coordinates
+      const wl = employee.work_locations;
+      let distanceMeters = null;
+      let geofence = null;
+
+      if (wl && wl.latitude !== null && wl.longitude !== null) {
+        geofence = {
+          name: wl.name,
+          latitude: parseFloat(wl.latitude),
+          longitude: parseFloat(wl.longitude),
+          radius_meters: wl.radius_meters
+        };
+        // Calculate distance using Haversine formula
+        const R = 6371000; // Earth radius in meters
+        const dLat = (geofence.latitude - lat) * Math.PI / 180;
+        const dLon = (geofence.longitude - lng) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(lat * Math.PI / 180) * Math.cos(geofence.latitude * Math.PI / 180) *
+                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        distanceMeters = R * c;
+      }
+
+      const responseData = {
+        employee_id: employee.id,
+        employee_name: employee.full_name,
+        latitude: lat,
+        longitude: lng,
+        source: source,
+        geofence: geofence,
+        distance_meters: distanceMeters
+      };
+
+      // 4. Log to Operational Activity Logs (audit_logs)
+      await logAudit(req, 'VIEW_LIVE_LOCATION', `employees/${employee.id}`, null, responseData);
+
+      res.json(responseData);
+    } catch (err) {
+      console.error('getEmployeeLiveLocation Error:', err.message);
+      res.status(500).json({ message: 'Error retrieving employee live location.' });
+    }
+  },
+
   // Get active online sessions / clocked in employees
   getActiveSessions: async (req, res) => {
     if (req.user.roleName !== 'Super Admin' && req.user.roleName !== 'Admin Controller') {
@@ -1084,6 +1233,9 @@ const securityController = {
           let isClockedIn = false;
           let clockInTime = null;
           let location = sess.location_name || 'Web Console';
+          if (location && location.includes('|')) {
+            location = location.split('|')[0] || 'Web Console';
+          }
 
           if (sess.users) {
             email = sess.users.email;

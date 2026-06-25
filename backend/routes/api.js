@@ -136,6 +136,7 @@ router.post('/attendance/corrections/:correctionId/approve', authenticateToken, 
 // Admin manual overrides
 router.post('/attendance/admin-add', authenticateToken, requirePermission('attendance:edit'), attendanceController.adminAddAttendance);
 router.put('/attendance/admin-update/:id', authenticateToken, requirePermission('attendance:edit'), attendanceController.adminUpdateAttendance);
+router.post('/attendance/admin-delete-to-leave/:id', authenticateToken, requirePermission('attendance:edit'), attendanceController.adminDeleteToLeave);
 
 
 /* =========================================================================
@@ -167,6 +168,7 @@ router.delete('/security/users/:userId', authenticateToken, requirePermission('r
 router.get('/security/active-sessions', authenticateToken, securityController.getActiveSessions);
 router.post('/security/force-signout', authenticateToken, securityController.forceSignout);
 router.post('/security/force-clockout', authenticateToken, securityController.forceClockout);
+router.get('/security/employee-location/:employeeId', authenticateToken, securityController.getEmployeeLiveLocation);
 
 
 router.get('/security/roles', authenticateToken, requirePermission('role:manage'), securityController.listRoles);
@@ -280,6 +282,7 @@ router.get('/documents/download/:filename', authenticateToken, async (req, res) 
 
 // Self-photo update endpoint
 router.post('/ess/profile/photo', authenticateToken, handleUpload('photo'), employeeController.uploadSelfPhoto);
+router.post('/ess/update-location', authenticateToken, securityController.updateSessionLocation);
 
 // Admin Controller management routes
 router.get('/security/admin-controller', authenticateToken, securityController.getAdminController);

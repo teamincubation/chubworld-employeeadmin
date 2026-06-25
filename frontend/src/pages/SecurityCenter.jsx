@@ -43,6 +43,15 @@ export default function SecurityCenter() {
   // Tab control
   const [activeTab, setActiveTab] = useState('audits'); // 'audits', 'users', 'locations', 'organization', 'settings', 'sessions', 'subadmins', 'holidays'
   const [sessionsList, setSessionsList] = useState([]);
+  const [sessionSearch, setSessionSearch] = useState('');
+  
+  // Live location states
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [locModalEmployeeName, setLocModalEmployeeName] = useState('');
+  const [locModalLoading, setLocModalLoading] = useState(false);
+  const [locModalError, setLocModalError] = useState('');
+  const [locModalData, setLocModalData] = useState(null);
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -72,6 +81,13 @@ export default function SecurityCenter() {
   const [subAdminForm, setSubAdminForm] = useState({ id: null, name: '', email: '', password: '', roleId: '2' });
   const [adminCreationLimit, setAdminCreationLimit] = useState(3);
   const [subAdminAccessSaving, setSubAdminAccessSaving] = useState(false);
+
+  const filteredSessions = (sessionsList || []).filter(item => {
+    const nameMatch = item.name && item.name.toLowerCase().includes(sessionSearch.toLowerCase());
+    const emailMatch = item.email && item.email.toLowerCase().includes(sessionSearch.toLowerCase());
+    const empIdMatch = item.employee_id_str && item.employee_id_str.toLowerCase().includes(sessionSearch.toLowerCase());
+    return nameMatch || emailMatch || empIdMatch;
+  });
 
   const handleOpenAddSubAdmin = () => {
     setSubAdminForm({ id: null, name: '', email: '', password: '', roleId: '2' });
@@ -913,6 +929,22 @@ export default function SecurityCenter() {
     }
   };
 
+  const handleViewLiveLocation = async (employeeId, employeeName) => {
+    setLocModalEmployeeName(employeeName);
+    setLocModalLoading(true);
+    setLocModalError('');
+    setLocModalData(null);
+    setShowLocationModal(true);
+    try {
+      const data = await request(`/security/employee-location/${employeeId}`);
+      setLocModalData(data);
+    } catch (err) {
+      setLocModalError(err.message || 'Failed to fetch live location.');
+    } finally {
+      setLocModalLoading(false);
+    }
+  };
+
   return (
     <div>
       {/* Header */}
@@ -1106,6 +1138,29 @@ export default function SecurityCenter() {
                                   <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '250px' }} title={log.user_agent}>
                                     UA: {log.user_agent}
                                   </div>
+                                  {log.new_value && (() => {
+                                    try {
+                                      const parsed = JSON.parse(log.new_value);
+                                      if (parsed && parsed.remark) {
+                                        return (
+                                          <div style={{ color: 'var(--chub-purple)', marginTop: '4px', fontWeight: 600 }}>
+                                            Remark: {parsed.remark}
+                                          </div>
+                                        );
+                                      }
+                                      if (parsed && parsed.latitude !== undefined) {
+                                        const distStr = parsed.distance_meters !== null && parsed.distance_meters !== undefined
+                                          ? (parsed.distance_meters < 1000 ? `${Math.round(parsed.distance_meters)}m` : `${(parsed.distance_meters/1000).toFixed(2)}km`)
+                                          : 'N/A';
+                                        return (
+                                          <div style={{ color: 'var(--chub-pink)', marginTop: '4px', fontWeight: 600 }}>
+                                            Coords: {parsed.latitude.toFixed(4)}, {parsed.longitude.toFixed(4)} (Dist: {distStr})
+                                          </div>
+                                        );
+                                      }
+                                    } catch (e) {}
+                                    return null;
+                                  })()}
                                 </div>
                               </td>
                               {user?.role === 'Super Admin' && (
@@ -1137,9 +1192,20 @@ export default function SecurityCenter() {
                   {user?.role === 'Super Admin' ? 'Active Online User Sessions' : 'Active Clocked-In Employees'}
                 </h3>
                 
-                {sessionsList.length === 0 ? (
+                <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'flex-start' }}>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Search by employee name or email..."
+                    style={{ maxWidth: '360px', padding: '8px 12px', fontSize: '13px' }}
+                    value={sessionSearch}
+                    onChange={(e) => setSessionSearch(e.target.value)}
+                  />
+                </div>
+                
+                {filteredSessions.length === 0 ? (
                   <p style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-                    No active sessions or clocked-in employees found.
+                    No active sessions or clocked-in employees found matching the search criteria.
                   </p>
                 ) : (
                   <div className="table-container">
@@ -1153,7 +1219,7 @@ export default function SecurityCenter() {
                             <th>Active From (IST)</th>
                             <th>Active Duration</th>
                             <th>Client Info</th>
-                            <th style={{ width: '120px', textAlign: 'center' }}>Actions</th>
+                            <th style={{ width: '240px', textAlign: 'center' }}>Actions</th>
                           </tr>
                         ) : (
                           <tr>
@@ -1164,12 +1230,12 @@ export default function SecurityCenter() {
                             <th>Assigned Location</th>
                             <th>Active From (IST)</th>
                             <th>Active Duration</th>
-                            <th style={{ width: '220px', textAlign: 'center' }}>Actions</th>
+                            <th style={{ width: '320px', textAlign: 'center' }}>Actions</th>
                           </tr>
                         )}
                       </thead>
                       <tbody>
-                        {sessionsList.map((item, idx) => {
+                        {filteredSessions.map((item, idx) => {
                           const uniqueKey = item.session_id || item.employee_id || idx;
                           if (user?.role === 'Super Admin') {
                             return (
@@ -1195,17 +1261,28 @@ export default function SecurityCenter() {
                                   </div>
                                 </td>
                                 <td style={{ textAlign: 'center' }}>
-                                  {item.session_id ? (
-                                    <button
-                                      onClick={() => handleForceSignout(item.session_id, item.name)}
-                                      className="btn btn-danger"
-                                      style={{ padding: '6px 12px', fontSize: '12px' }}
-                                    >
-                                      Force Signout
-                                    </button>
-                                  ) : (
-                                    <span style={{ color: 'var(--text-muted)' }}>Offline</span>
-                                  )}
+                                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                    {item.employee_id && (
+                                      <button
+                                        onClick={() => handleViewLiveLocation(item.employee_id, item.name)}
+                                        className="btn btn-secondary"
+                                        style={{ padding: '6px 12px', fontSize: '12px', borderColor: 'var(--chub-purple)', color: 'var(--chub-purple)' }}
+                                      >
+                                        View Location
+                                      </button>
+                                    )}
+                                    {item.session_id ? (
+                                      <button
+                                        onClick={() => handleForceSignout(item.session_id, item.name)}
+                                        className="btn btn-danger"
+                                        style={{ padding: '6px 12px', fontSize: '12px' }}
+                                      >
+                                        Force Signout
+                                      </button>
+                                    ) : (
+                                      <span style={{ color: 'var(--text-muted)' }}>Offline</span>
+                                    )}
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -1222,6 +1299,13 @@ export default function SecurityCenter() {
                                 <td style={{ fontWeight: 600, color: 'var(--chub-pink)' }}>{item.active_duration}</td>
                                 <td style={{ textAlign: 'center' }}>
                                   <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                    <button
+                                      onClick={() => handleViewLiveLocation(item.employee_id, item.name)}
+                                      className="btn btn-secondary"
+                                      style={{ padding: '6px 12px', fontSize: '12px', borderColor: 'var(--chub-pink)', color: 'var(--chub-pink)' }}
+                                    >
+                                      View Location
+                                    </button>
                                     <button
                                       onClick={() => handleForceClockout(item.employee_id, item.name)}
                                       className="btn btn-secondary"
@@ -2481,6 +2565,109 @@ export default function SecurityCenter() {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* LIVE LOCATION MODAL */}
+      {showLocationModal && (
+        <div className="modal-overlay" onClick={() => setShowLocationModal(false)}>
+          <div className="modal-content" style={{ maxWidth: '600px', width: '90%' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '20px' }}>
+              <h3 style={{ margin: 0, textTransform: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <MapPin size={20} style={{ color: 'var(--chub-pink)' }} />
+                Live Geolocation Tracking - {locModalEmployeeName}
+              </h3>
+              <button 
+                onClick={() => setShowLocationModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: 'var(--text-muted)', lineHeight: '1' }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {locModalLoading ? (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px', color: 'var(--text-muted)' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ width: '40px', height: '40px', border: '3px solid var(--border-color)', borderTopColor: 'var(--chub-pink)', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 12px' }} />
+                  <div>Fetching live coordinate telemetry...</div>
+                </div>
+              </div>
+            ) : locModalError ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '200px', textAlign: 'center', color: 'var(--color-error)' }}>
+                <AlertTriangle size={36} style={{ marginBottom: '12px', color: '#FF4D4D' }} />
+                <div>{locModalError}</div>
+              </div>
+            ) : locModalData ? (
+              <div>
+                <div style={{ fontSize: '13px', marginBottom: '16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', lineHeight: '1.5', color: 'var(--text-muted)' }}>
+                  <div>
+                    <strong>Data Source:</strong> <span style={{ color: 'var(--chub-pink)', fontWeight: 600 }}>{locModalData.source}</span>
+                  </div>
+                  <div>
+                    <strong>Coordinates:</strong> {locModalData.latitude}, {locModalData.longitude}
+                  </div>
+                  {locModalData.geofence ? (
+                    <>
+                      <div>
+                        <strong>Assigned Geofence:</strong> {locModalData.geofence.name}
+                      </div>
+                      <div>
+                        <strong>Geofence Target:</strong> {locModalData.geofence.latitude}, {locModalData.geofence.longitude} (Radius: {locModalData.geofence.radius_meters}m)
+                      </div>
+                      <div style={{ gridColumn: 'span 2', padding: '6px 0', borderTop: '1px solid var(--border-color)', marginTop: '4px' }}>
+                        <strong>Geofence Discrepancy (Distance): </strong> 
+                        <span style={{ 
+                          fontWeight: 'bold', 
+                          fontSize: '14px',
+                          color: locModalData.distance_meters > locModalData.geofence.radius_meters ? '#FF4D4D' : '#2ECC71'
+                        }}>
+                          {locModalData.distance_meters < 1000 ? `${Math.round(locModalData.distance_meters)} meters` : `${(locModalData.distance_meters / 1000).toFixed(2)} km`}
+                        </span>
+                        {locModalData.distance_meters > locModalData.geofence.radius_meters ? (
+                          <span style={{ fontSize: '11px', color: '#FF4D4D', display: 'block', marginTop: '2px' }}>
+                            ⚠️ User is currently OUTSIDE the geofenced office boundary!
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: '11px', color: '#2ECC71', display: 'block', marginTop: '2px' }}>
+                            ✅ User is inside the geofenced office boundary.
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ gridColumn: 'span 2', color: 'var(--color-warning)' }}>
+                      No geofence boundaries assigned to this employee profile.
+                    </div>
+                  )}
+                </div>
+
+                <iframe
+                  title="Employee Live Location Map"
+                  width="100%"
+                  height="320"
+                  style={{ border: '1px solid var(--border-color)', borderRadius: '12px', marginBottom: '16px' }}
+                  loading="lazy"
+                  allowFullScreen
+                  src={`https://maps.google.com/maps?q=${locModalData.latitude},${locModalData.longitude}&t=&z=16&ie=UTF8&iwloc=&output=embed`}
+                />
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${locModalData.latitude},${locModalData.longitude}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-secondary"
+                    style={{ fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--chub-purple)', borderColor: 'var(--chub-purple)' }}
+                  >
+                    <MapPin size={12} /> Open in Google Maps External Tab
+                  </a>
+                  <button onClick={() => setShowLocationModal(false)} className="btn btn-primary" style={{ padding: '8px 24px' }}>
+                    Close
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       )}
