@@ -38,8 +38,10 @@ export default function LeaveManager() {
         const list = await request('/leaves/admin-requests');
         setRequests(list);
       } else if (activeTab === 'balances') {
-        const emps = await request('/employees/dropdown');
-        const types = await request('/leaves/types');
+        const [emps, types] = await Promise.all([
+          request('/employees/dropdown'),
+          request('/leaves/types')
+        ]);
         setEmployees(emps);
         setLeaveTypes(types);
       }

@@ -3,7 +3,7 @@ import { useAuth, API_BASE_URL } from '../context/AuthContext';
 import { User, Lock, Key, ShieldAlert, CheckCircle, FileText, Camera, LogOut, Settings, Bell } from 'lucide-react';
 
 export default function ESSProfile() {
-  const { request, fetchProfile: refreshGlobalProfile, logout } = useAuth();
+  const { request, user, fetchProfile: refreshGlobalProfile, logout } = useAuth();
   
   // Profile state
   const [profile, setProfile] = useState(null);
@@ -31,9 +31,13 @@ export default function ESSProfile() {
   const fetchProfile = async () => {
     try {
       setLoading(true);
-      const data = await request('/auth/me');
-      if (data.employee?.id) {
-        const details = await request(`/employees/${data.employee.id}`);
+      let employeeId = user?.employee?.id;
+      if (!employeeId) {
+        const data = await request('/auth/me');
+        employeeId = data.employee?.id;
+      }
+      if (employeeId) {
+        const details = await request(`/employees/${employeeId}`);
         setProfile(details);
       }
     } catch (err) {

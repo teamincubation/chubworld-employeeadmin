@@ -30,9 +30,11 @@ export default function ReportsPage() {
 
   const fetchMetadata = async () => {
     try {
-      const list = await request('/metadata/departments');
+      const [list, emps] = await Promise.all([
+        request('/metadata/departments'),
+        request('/employees/dropdown')
+      ]);
       setDepartments(list);
-      const emps = await request('/employees/dropdown');
       setEmployeesList(emps || []);
     } catch (err) {
       console.error(err);
@@ -525,7 +527,7 @@ export default function ReportsPage() {
                             <div style={{ fontWeight: 600 }}>{r.full_name}</div>
                             <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{r.employee_id}</span>
                           </td>
-                          <td>{r.clock_in_time}</td>
+                          <td>{r.clock_in_time || '--:--:--'}</td>
                           <td>
                             <span className={`badge ${r.clock_in_location_status === 'Verified-Inside' ? 'badge-active' : 'badge-rejected'}`}>
                               {r.clock_in_location_status}

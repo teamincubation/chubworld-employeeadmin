@@ -312,7 +312,7 @@ export default function AttendanceHub() {
                               <td style={{ fontWeight: 'bold' }}>{log.employee_id_str || log.employee_id}</td>
                               <td style={{ fontWeight: 600 }}>{log.full_name}</td>
                               <td>
-                                <div>{log.clock_in_time}</div>
+                                <div>{log.clock_in_time || '--:--:--'}</div>
                                 {renderIpBadge(log.clock_in_ip)}
                               </td>
                               <td 
@@ -365,7 +365,11 @@ export default function AttendanceHub() {
                                     {renderIpBadge(log.clock_out_ip)}
                                   </div>
                                 ) : (
-                                  <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Working...</span>
+                                  log.status === 'Leave' ? (
+                                    <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>--:--:--</span>
+                                  ) : (
+                                    <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Working...</span>
+                                  )
                                 )}
                               </td>
                               <td>{log.total_hours ? `${log.total_hours} hrs` : '--'}</td>

@@ -251,7 +251,7 @@ const employeeController = {
       .from('employees')
       .select(`
         id, employee_id, full_name, mobile, email, onboarding_status, status,
-        employment_type, joining_salary, contract_till_date,
+        employment_type, joining_salary, contract_till_date, photo_path,
         departments(name), designations(name), work_locations(name)
       `)
       .is('deleted_at', null)

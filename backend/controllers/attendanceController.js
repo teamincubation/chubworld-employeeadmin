@@ -208,6 +208,9 @@ const attendanceController = {
       }
 
       const record = logs[0];
+      if (record.status === 'Leave') {
+        return res.json({ status: 'leave', record, shift, workLocation, workHours });
+      }
       if (!record.clock_out_time) {
         const clockInTimeStr = record.clock_in_time.length === 5 ? `${record.clock_in_time}:00` : record.clock_in_time;
         const inDate = new Date(`${record.date}T${clockInTimeStr}`);
@@ -554,7 +557,13 @@ const attendanceController = {
 
     try {
       const { data: logs } = await supabase.from('attendance_logs').select('*').eq('employee_id', employeeId).order('date', { ascending: false }).limit(90);
-      res.json(logs || []);
+      const sanitizedLogs = (logs || []).map(l => ({
+        ...l,
+        clock_in_time: (l.status === 'Leave' || l.clock_in_time === '00:00:00') ? null : l.clock_in_time,
+        clock_out_time: (l.status === 'Leave' || l.clock_out_time === '00:00:00') ? null : l.clock_out_time,
+        total_hours: l.status === 'Leave' ? null : l.total_hours
+      }));
+      res.json(sanitizedLogs);
     } catch (err) {
       console.error('GetEmployeeLogs Error:', err.message);
       res.status(500).json({ message: 'Error retrieving your attendance history.' });
@@ -588,6 +597,9 @@ const attendanceController = {
 
       const mappedLogs = logs.map(l => ({
         ...l,
+        clock_in_time: (l.status === 'Leave' || l.clock_in_time === '00:00:00') ? null : l.clock_in_time,
+        clock_out_time: (l.status === 'Leave' || l.clock_out_time === '00:00:00') ? null : l.clock_out_time,
+        total_hours: l.status === 'Leave' ? null : l.total_hours,
         employee_id_str: l.employees.employee_id,
         full_name: l.employees.full_name,
         department_name: l.employees.departments ? l.employees.departments.name : null
@@ -886,11 +898,11 @@ const attendanceController = {
             date: dateStr,
             dayName: dateObj.toLocaleDateString('en-US', { weekday: 'short' }),
             isHoliday,
-            clockIn: log ? log.clock_in_time : null,
-            clockOut: log ? log.clock_out_time : null,
+            clockIn: log ? ((log.status === 'Leave' || log.clock_in_time === '00:00:00') ? null : log.clock_in_time) : null,
+            clockOut: log ? ((log.status === 'Leave' || log.clock_out_time === '00:00:00') ? null : log.clock_out_time) : null,
             geofenceIn: log ? log.clock_in_location_status : null,
             geofenceOut: log ? log.clock_out_location_status : null,
-            hours: log ? log.total_hours : 0,
+            hours: log ? (log.status === 'Leave' ? 0 : log.total_hours) : 0,
             status: dayStatus,
             clock_in_ip: log ? log.clock_in_ip : null,
             clock_out_ip: log ? log.clock_out_ip : null

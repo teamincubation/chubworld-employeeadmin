@@ -99,23 +99,21 @@ export default function ESSDashboard() {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const userDetails = await request('/auth/me');
-      setProfile(userDetails);
+      const [userDetails, attStatus, leaveData, logsData] = await Promise.all([
+        request('/auth/me'),
+        request('/attendance/status'),
+        request('/leaves/my-leaves'),
+        request('/attendance/my-logs')
+      ]);
 
-      // Fetch today's clock status
-      const attStatus = await request('/attendance/status');
+      setProfile(userDetails);
       setAttendance(attStatus);
 
       if (attStatus && attStatus.warningNotification) {
         triggerWebNotification();
       }
 
-      // Fetch leave balances
-      const leaveData = await request('/leaves/my-leaves');
-      setLeaves(leaveData.balances);
-
-      // Fetch logs for current month stats
-      const logsData = await request('/attendance/my-logs');
+      setLeaves(leaveData.balances || []);
       const now = new Date();
       const currentYear = now.getFullYear();
       const currentMonth = now.getMonth();
@@ -585,7 +583,7 @@ export default function ESSDashboard() {
         <div style={{ flex: 1.5, minWidth: '300px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
           {/* Leave Balances Card */}
-          <div className="card" style={{ flex: 1 }}>
+          <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
             <h3 style={{ fontSize: '14px', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px', marginBottom: '16px' }}>
               Allocated Leave Balances (CL / SL / EL)
             </h3>
@@ -608,6 +606,13 @@ export default function ESSDashboard() {
                 })}
               </div>
             )}
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', borderTop: '1px solid #F1F5F9', paddingTop: '12px' }}>
+              <span style={{ color: '#6B7280', fontSize: '11px' }}>Need time from duty?</span>
+              <Link to="/ess/leaves" className="btn btn-secondary" style={{ padding: '4px 12px', fontSize: '10px', borderRadius: '20px' }}>
+                + Request
+              </Link>
+            </div>
           </div>
 
           {/* Month Attendance Card */}
@@ -633,13 +638,6 @@ export default function ESSDashboard() {
                 <span>Late In</span>
                 <strong>{monthlyStats.late}</strong>
               </div>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', borderTop: '1px solid #F1F5F9', paddingTop: '12px' }}>
-              <span style={{ color: '#6B7280', fontSize: '11px' }}>Need time off from duty?</span>
-              <Link to="/ess/leaves" className="btn btn-secondary" style={{ padding: '4px 12px', fontSize: '10px', borderRadius: '20px' }}>
-                + Request
-              </Link>
             </div>
           </div>
 

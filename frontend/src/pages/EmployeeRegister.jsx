@@ -95,10 +95,12 @@ export default function EmployeeRegister() {
 
   const fetchMetadata = async () => {
     try {
-      const depts = await request('/metadata/departments');
-      const desigs = await request('/metadata/designations');
-      const locs = await request('/metadata/work-locations');
-      const mgrs = await request('/employees/dropdown');
+      const [depts, desigs, locs, mgrs] = await Promise.all([
+        request('/metadata/departments'),
+        request('/metadata/designations'),
+        request('/metadata/work-locations'),
+        request('/employees/dropdown')
+      ]);
       setDepartments(depts);
       setDesignations(desigs);
       setLocations(locs);
@@ -1051,32 +1053,46 @@ export default function EmployeeRegister() {
             <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap', alignItems: 'center' }}>
               
               {/* Profile Photo Display */}
-              <div style={{
-                width: '80px',
-                height: '80px',
-                borderRadius: '50%',
-                overflow: 'hidden',
-                boxShadow: 'var(--shadow-sm)',
-                border: '3px solid var(--chub-pink)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: 'var(--chub-gradient)',
-                flexShrink: 0
-              }}>
-                <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {profileData.employee.photo_path && (
-                    <img 
-                      src={`${API_BASE_URL.replace('/api', '')}/${profileData.employee.photo_path}`} 
-                      alt={profileData.employee.full_name} 
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0 }} 
-                      onError={(e) => { e.target.style.display = 'none'; }}
-                    />
-                  )}
-                  <div style={{ fontSize: '28px', color: '#FFFFFF', fontWeight: 'bold' }}>
-                    {profileData.employee.full_name?.charAt(0).toUpperCase()}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{
+                  width: '80px',
+                  height: '80px',
+                  borderRadius: '50%',
+                  overflow: 'hidden',
+                  boxShadow: 'var(--shadow-sm)',
+                  border: '3px solid var(--chub-pink)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'var(--chub-gradient)',
+                  flexShrink: 0
+                }}>
+                  <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {profileData.employee.photo_path && (
+                      <img 
+                        src={`${API_BASE_URL.replace('/api', '')}/${profileData.employee.photo_path}`} 
+                        alt={profileData.employee.full_name} 
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0 }} 
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                      />
+                    )}
+                    <div style={{ fontSize: '28px', color: '#FFFFFF', fontWeight: 'bold' }}>
+                      {profileData.employee.full_name?.charAt(0).toUpperCase()}
+                    </div>
                   </div>
                 </div>
+                {profileData.employee.photo_path && (
+                  <a 
+                    href={`${API_BASE_URL.replace('/api', '')}/${profileData.employee.photo_path}`} 
+                    download 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="btn btn-secondary" 
+                    style={{ padding: '2px 8px', fontSize: '9px', borderRadius: '4px', textTransform: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '8px' }}
+                  >
+                    Download Photo
+                  </a>
+                )}
               </div>
 
               <div>
