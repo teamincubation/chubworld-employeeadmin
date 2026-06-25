@@ -20,7 +20,7 @@ const dashboardController = require('../controllers/dashboardController');
 // Multer Storage Configuration for secure uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const dir = process.env.UPLOAD_DIR || './uploads';
+    const dir = process.env.UPLOAD_DIR || path.join(__dirname, '../uploads');
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
@@ -204,7 +204,7 @@ router.post('/security/clear-employees', authenticateToken, requireRole(['Super 
    ========================================================================= */
 router.get('/documents/download/:filename', authenticateToken, async (req, res) => {
   const { filename } = req.params;
-  const dir = process.env.UPLOAD_DIR || './uploads';
+  const dir = process.env.UPLOAD_DIR || path.join(__dirname, '../uploads');
   let targetFilename = filename;
   let filePath = path.join(dir, filename);
 

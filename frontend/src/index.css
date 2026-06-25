@@ -1203,5 +1203,15 @@ button, input, select, textarea {
   opacity: 0.7 !important;
 }
 
+/* Calendar Day Cell & Status overrides */
+.ess-layout-container .calendar-day-cell span {
+  font-size: 10px !important;
+}
+
+.ess-layout-container .calendar-day-cell span.calendar-day-status {
+  font-size: 8px !important;
+}
+
+
 
 

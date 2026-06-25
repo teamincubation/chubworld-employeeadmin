@@ -180,14 +180,10 @@ export default function ESSPerformance() {
         </div>
 
         {/* Metrics Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '20px' }}>
           <div className="card" style={{ padding: '12px !important', borderLeft: '4px solid #10B981', borderTop: 'none', borderRight: 'none', borderBottom: 'none', borderRadius: '8px' }}>
             <span style={{ fontSize: '9px', color: '#6B7280', fontWeight: 600, textTransform: 'uppercase' }}>Days Present</span>
             <h4 style={{ fontSize: '18px', margin: '4px 0 0 0', fontWeight: 'bold' }}>{summary.present} Days</h4>
-          </div>
-          <div className="card" style={{ padding: '12px !important', borderLeft: '4px solid #F59E0B', borderTop: 'none', borderRight: 'none', borderBottom: 'none', borderRadius: '8px' }}>
-            <span style={{ fontSize: '9px', color: '#6B7280', fontWeight: 600, textTransform: 'uppercase' }}>Late Arrivals</span>
-            <h4 style={{ fontSize: '18px', margin: '4px 0 0 0', fontWeight: 'bold' }}>{summary.late} Days</h4>
           </div>
           <div className="card" style={{ padding: '12px !important', borderLeft: '4px solid #2E62F6', borderTop: 'none', borderRight: 'none', borderBottom: 'none', borderRadius: '8px' }}>
             <span style={{ fontSize: '9px', color: '#6B7280', fontWeight: 600, textTransform: 'uppercase' }}>Leaves Taken</span>

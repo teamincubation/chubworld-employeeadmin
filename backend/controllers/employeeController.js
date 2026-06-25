@@ -656,8 +656,14 @@ const employeeController = {
       const doc = docs[0];
 
       // Delete file from disk
-      if (fs.existsSync(doc.file_path)) {
-        fs.unlinkSync(doc.file_path);
+      if (doc.file_path) {
+        let filePath = doc.file_path;
+        if (!path.isAbsolute(filePath)) {
+          filePath = path.join(__dirname, '../', filePath);
+        }
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
       }
 
       // Delete from database
@@ -682,23 +688,23 @@ const employeeController = {
       return res.status(400).json({ message: 'No linked employee profile found for this user.' });
     }
     try {
-      // Normalize path to use forward slashes
-      const filePath = req.file.path.replace(/\\/g, '/');
+      // Store standard dynamic relative path in database
+      const dbPath = `uploads/${req.file.filename}`;
 
       // Update the employee record
       const { error: updateErr } = await supabase
         .from('employees')
-        .update({ photo_path: filePath })
+        .update({ photo_path: dbPath })
         .eq('id', employeeId);
 
       if (updateErr) throw updateErr;
 
       // Log audit trail
-      await logAudit(req, 'UPDATE_SELF_PHOTO', `employees/${employeeId}`, null, { photo_path: filePath });
+      await logAudit(req, 'UPDATE_SELF_PHOTO', `employees/${employeeId}`, null, { photo_path: dbPath });
 
       res.json({
         message: 'Profile photo uploaded successfully.',
-        photo_path: filePath
+        photo_path: dbPath
       });
     } catch (err) {
       console.error('Upload Self Photo Error:', err.message);

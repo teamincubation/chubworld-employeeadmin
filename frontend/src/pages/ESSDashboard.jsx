@@ -277,7 +277,11 @@ export default function ESSDashboard() {
         return `${locationName} (Inside boundary)`;
       } else {
         const outsideMeters = Math.round(dist - radius);
-        return `${locationName} (${outsideMeters}m outside boundary)`;
+        if (outsideMeters >= 1000) {
+          return `${locationName} (${(outsideMeters / 1000).toFixed(1)} km outside boundary)`;
+        } else {
+          return `${locationName} (${outsideMeters}m outside boundary)`;
+        }
       }
     }
     return locationName;

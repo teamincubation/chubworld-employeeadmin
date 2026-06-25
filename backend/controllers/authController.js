@@ -760,7 +760,10 @@ const authController = {
       if (req.user.roleName === 'Employee') {
         const { data: employees, error: empErr } = await supabase
           .from('employees')
-          .select('id, employee_id, full_name, email, mobile, onboarding_status, photo_path, status, employment_type')
+          .select(`
+            id, employee_id, full_name, email, mobile, onboarding_status, photo_path, status, employment_type,
+            work_locations(name)
+          `)
           .eq('id', req.user.id)
           .is('deleted_at', null);
 
@@ -784,7 +787,8 @@ const authController = {
             mobile: employee.mobile,
             onboarding_status: employee.onboarding_status,
             photo_path: employee.photo_path,
-            employment_type: employee.employment_type
+            employment_type: employee.employment_type,
+            work_location_name: employee.work_locations ? employee.work_locations.name : null
           }
         });
       }
@@ -805,13 +809,22 @@ const authController = {
       // Fetch employee profile details if linked to this user account
       const { data: empProfile, error: empError } = await supabase
         .from('employees')
-        .select('id, employee_id, full_name, mobile, onboarding_status, photo_path, employment_type')
+        .select(`
+          id, employee_id, full_name, mobile, onboarding_status, photo_path, employment_type,
+          work_locations(name)
+        `)
         .eq('user_id', user.id);
         
       if (!empError && empProfile && empProfile.length > 0) {
         employeeProfile = {
-          ...empProfile[0],
-          employment_type: empProfile[0].employment_type
+          id: empProfile[0].id,
+          employee_id: empProfile[0].employee_id,
+          full_name: empProfile[0].full_name,
+          mobile: empProfile[0].mobile,
+          onboarding_status: empProfile[0].onboarding_status,
+          photo_path: empProfile[0].photo_path,
+          employment_type: empProfile[0].employment_type,
+          work_location_name: empProfile[0].work_locations ? empProfile[0].work_locations.name : null
         };
       } else if (roleName === 'Admin Controller') {
         const { data: controllerAcc } = await supabase

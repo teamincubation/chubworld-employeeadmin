@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth, API_BASE_URL } from '../context/AuthContext';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
-import { Home, Clock, FileText, Calendar, User, LogOut, MapPin, Bell } from 'lucide-react';
+import { Home, Clock, FileText, Calendar, User, LogOut, MapPin } from 'lucide-react';
 
 export default function ESSLayoutShell({ children }) {
   const { user, logout } = useAuth();
@@ -35,13 +35,6 @@ export default function ESSLayoutShell({ children }) {
           <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left' }}>
             <span style={{ fontSize: '10px', color: 'rgba(255, 255, 255, 0.8)', fontWeight: '600', textTransform: 'uppercase' }}>Location</span>
             <span style={{ fontSize: '12px', color: '#FFFFFF', fontWeight: 'bold' }}>{locationName}</span>
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {/* Notification bell mock */}
-          <div style={{ position: 'relative', width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', cursor: 'pointer' }}>
-            <Bell size={16} />
-            <span style={{ position: 'absolute', top: '2px', right: '2px', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#EF4444', border: '2px solid #2E62F6' }} />
           </div>
         </div>
       </header>

@@ -360,7 +360,10 @@ const securityController = {
         if (docs && docs.length > 0) {
           docs.forEach(doc => {
             if (doc.file_path) {
-              const filePath = path.resolve(doc.file_path);
+              let filePath = doc.file_path;
+              if (!path.isAbsolute(filePath)) {
+                filePath = path.join(__dirname, '../', filePath);
+              }
               if (fs.existsSync(filePath)) {
                 try {
                   fs.unlinkSync(filePath);
@@ -374,7 +377,10 @@ const securityController = {
 
         // Delete photo from disk
         if (employeeRecord.photo_path) {
-          const photoPath = path.resolve(employeeRecord.photo_path);
+          let photoPath = employeeRecord.photo_path;
+          if (!path.isAbsolute(photoPath)) {
+            photoPath = path.join(__dirname, '../', photoPath);
+          }
           if (fs.existsSync(photoPath)) {
             try {
               fs.unlinkSync(photoPath);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Clock, MapPin, CheckCircle, ShieldAlert, Navigation, Calendar, ArrowLeft, Plus } from 'lucide-react';
+import { Clock, MapPin, CheckCircle, ShieldAlert, Navigation, Calendar, ArrowLeft } from 'lucide-react';
 
 export default function ESSClockIn() {
   const { request } = useAuth();
@@ -165,7 +165,7 @@ export default function ESSClockIn() {
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto', padding: '0px' }}>
       
-      {/* Header section with back button and plus button */}
+      {/* Header section with back button */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
         <button 
           onClick={() => navigate('/')} 
@@ -174,12 +174,7 @@ export default function ESSClockIn() {
           <ArrowLeft size={16} /> Back
         </button>
         <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#1A1D20', margin: 0 }}>Shift Details</h2>
-        <button 
-          onClick={() => alert("Quick notes or correction submissions can be added here.")} 
-          style={{ background: '#EEF2F6', border: 'none', color: '#2E62F6', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyCenter: 'center', justifyContent: 'center' }}
-        >
-          <Plus size={16} />
-        </button>
+        <div style={{ width: '56px' }} />
       </div>
 
       {/* Live System Time */}
