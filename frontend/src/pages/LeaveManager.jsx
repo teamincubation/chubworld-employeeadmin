@@ -2,12 +2,39 @@ import React, { useState, useEffect } from 'react';
 import { useAuth, API_BASE_URL } from '../context/AuthContext';
 import { Calendar, FileText, Check, X, ShieldAlert, Plus, Edit3 } from 'lucide-react';
 
+const formatDate = (dateStr) => {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    const year = parts[0];
+    const monthIndex = parseInt(parts[1], 10) - 1;
+    const day = parts[2];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[monthIndex];
+    if (month) {
+      return `${day.padStart(2, '0')}/${month}/${year}`;
+    }
+  }
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return dateStr;
+  const day = String(date.getDate()).padStart(2, '0');
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const month = months[date.getMonth()];
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
 export default function LeaveManager() {
   const { request } = useAuth();
   
   const [requests, setRequests] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [leaveTypes, setLeaveTypes] = useState([]);
+  
+  const [selectedBalances, setSelectedBalances] = useState([]);
+  const [selectedEmpName, setSelectedEmpName] = useState('');
+  const [showBalancesModal, setShowBalancesModal] = useState(false);
+  const [fetchingBalances, setFetchingBalances] = useState(false);
   
   // UI Tabs
   const [activeTab, setActiveTab] = useState('requests'); // 'requests', 'balances'
@@ -67,6 +94,21 @@ export default function LeaveManager() {
       fetchData();
     } catch (err) {
       alert(err.message);
+    }
+  };
+
+  const handleViewBalances = async (employeeId, name) => {
+    setSelectedEmpName(name);
+    setFetchingBalances(true);
+    setShowBalancesModal(true);
+    try {
+      const data = await request(`/leaves/employee/${employeeId}`);
+      setSelectedBalances(data || []);
+    } catch (err) {
+      alert(err.message || 'Error fetching leave balances.');
+      setShowBalancesModal(false);
+    } finally {
+      setFetchingBalances(false);
     }
   };
 
@@ -153,14 +195,21 @@ export default function LeaveManager() {
                           <tr key={req.id}>
                             <td>
                               <div style={{ fontWeight: 600 }}>{req.full_name}</div>
-                              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{req.employee_id}</span>
+                              <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>{req.employee_id_str || req.employee_id}</span>
+                              <button
+                                onClick={() => handleViewBalances(req.employee_id, req.full_name)}
+                                className="btn btn-secondary"
+                                style={{ padding: '4px 8px', fontSize: '10px', height: 'auto', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              >
+                                View Leave Status
+                              </button>
                             </td>
                             <td>
                               <span className="badge badge-kyc-pending">{req.leave_name} ({req.leave_code})</span>
                             </td>
                             <td>
-                              <div>From: <strong>{new Date(req.from_date).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' })}</strong></div>
-                              <div>To: <strong>{new Date(req.to_date).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' })}</strong></div>
+                              <div>From: <strong>{formatDate(req.from_date)}</strong></div>
+                              <div>To: <strong>{formatDate(req.to_date)}</strong></div>
                             </td>
                             <td style={{ fontWeight: 'bold', fontSize: '15px' }}>{req.total_days} Days</td>
                             <td>
@@ -321,6 +370,76 @@ export default function LeaveManager() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW LEAVE STATUS / BALANCE MODAL */}
+      {showBalancesModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '600px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '14px', marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '18px', color: 'var(--chub-purple)', margin: 0 }}>Leave Balance Status</h3>
+              <button 
+                onClick={() => setShowBalancesModal(false)} 
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Employee:</span>
+              <strong style={{ fontSize: '16px', color: 'var(--text-main)', marginLeft: '8px' }}>{selectedEmpName}</strong>
+            </div>
+
+            {fetchingBalances ? (
+              <p style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>Retrieving leave balances...</p>
+            ) : selectedBalances.length === 0 ? (
+              <p style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>No leave balance records found for the current year.</p>
+            ) : (
+              <div className="table-container">
+                <table className="custom-table" style={{ width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ padding: '10px 12px', fontSize: '11px' }}>Category</th>
+                      <th style={{ padding: '10px 12px', fontSize: '11px', textAlign: 'center' }}>Allocated</th>
+                      <th style={{ padding: '10px 12px', fontSize: '11px', textAlign: 'center' }}>Taken</th>
+                      <th style={{ padding: '10px 12px', fontSize: '11px', textAlign: 'center' }}>Pending</th>
+                      <th style={{ padding: '10px 12px', fontSize: '11px', textAlign: 'center' }}>Remaining</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedBalances.map((bal) => {
+                      const allocated = Number(bal.total_days) || 0;
+                      const availed = Number(bal.availed_days) || 0;
+                      const pending = Number(bal.pending_days) || 0;
+                      const remaining = Math.max(0, allocated - availed - pending);
+
+                      return (
+                        <tr key={bal.id}>
+                          <td style={{ padding: '10px 12px', fontWeight: 600 }}>
+                            {bal.leave_name} <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 'normal' }}>({bal.leave_code})</span>
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 'bold' }}>{allocated}</td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center', color: availed > 0 ? 'var(--color-warning)' : 'inherit' }}>{availed}</td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center', color: pending > 0 ? 'var(--color-info)' : 'inherit' }}>{pending}</td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 'bold', color: remaining > 0 ? 'var(--color-success)' : 'var(--color-error)' }}>
+                            {remaining}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px' }}>
+              <button onClick={() => setShowBalancesModal(false)} className="btn btn-primary" style={{ padding: '8px 24px' }}>
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -147,6 +147,7 @@ router.post('/leaves/request', authenticateToken, leaveController.submitLeaveReq
 router.post('/leaves/cancel/:id', authenticateToken, leaveController.cancelPendingRequest);
 
 router.get('/leaves/admin-requests', authenticateToken, requirePermission('leave:approve'), leaveController.listAdminRequests);
+router.get('/leaves/employee/:employeeId', authenticateToken, requirePermission('leave:approve'), leaveController.getEmployeeLeavesForAdmin);
 router.post('/leaves/approve/:id', authenticateToken, requirePermission('leave:approve'), leaveController.approveLeave);
 router.post('/leaves/adjust', authenticateToken, requirePermission('leave:manage'), leaveController.adjustBalance);
 router.get('/leaves/types', authenticateToken, leaveController.getLeaveTypes);

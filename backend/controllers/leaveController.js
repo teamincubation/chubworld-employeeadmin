@@ -395,6 +395,36 @@ const leaveController = {
     }
   },
 
+  // Fetch specific employee's leave balances (Admin)
+  getEmployeeLeavesForAdmin: async (req, res) => {
+    const { employeeId } = req.params;
+    if (!employeeId) {
+      return res.status(400).json({ message: 'Employee ID is required.' });
+    }
+
+    try {
+      const year = new Date().getFullYear();
+      
+      const { data: balances } = await supabase
+        .from('leave_balances')
+        .select('*, leave_types!inner(name, code, active)')
+        .eq('employee_id', employeeId)
+        .eq('year', year)
+        .eq('leave_types.active', true);
+
+      const mappedBalances = (balances || []).map(b => ({
+        ...b,
+        leave_name: b.leave_types ? b.leave_types.name : null,
+        leave_code: b.leave_types ? b.leave_types.code : null
+      }));
+
+      res.json(mappedBalances);
+    } catch (err) {
+      console.error('GetEmployeeLeavesForAdmin Error:', err.message);
+      res.status(500).json({ message: 'Error retrieving employee leave balances.' });
+    }
+  },
+
   // Fetch all leave types
   getLeaveTypes: async (req, res) => {
     try {
